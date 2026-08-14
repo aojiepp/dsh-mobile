@@ -2,7 +2,7 @@
 
 在 Android 手机上**独立运行完整 DeepSeek Harness（DSH）**的开源实现：一个原生 WebView 壳 + 内嵌 aarch64 Node.js 运行时 + 裁剪后的 DSH 依赖树。手机自己启动 DSH 服务（`127.0.0.1:3080`），不依赖电脑，可离线于 PC 使用。
 
-> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；v2.4 起 **bash / write / glob / grep 工具全部可用**（内置 GNU bash 5.3 + ripgrep 15.2，并修复了 Android 上 `link()` 被 SELinux 禁止导致的写文件失败）；v2.5 起内置**收纳箱**（设置页 → 收纳箱：按「工作台产物 / 会话记录」分类浏览，可提取到手机 Download 或删除）；界面细节继续迭代中，欢迎 issue / PR。
+> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；v2.4 起 **bash / write / glob / grep 工具全部可用**（内置 GNU bash 5.3 + ripgrep 15.2，并修复了 Android 上 `link()` 被 SELinux 禁止导致的写文件失败）；v2.5 起内置**收纳箱**（设置页 → 收纳箱：按「工作台产物 / 会话记录」分类浏览，可提取到手机 Download 或删除）；v2.6 起原生界面**统一为 DeepSeek 灰色单风格**（灰底白卡 + DeepSeek 蓝 `#4D6BFE`，深浅合一只保留一套，夜间模式不再切换）；界面细节继续迭代中，欢迎 issue / PR。
 
 ## 工作原理
 
@@ -65,7 +65,7 @@ copy payload\payload.zip app\src\main\assets\payload.zip
 
 # 4. 构建 APK（构建目录必须是 ASCII 路径，中文路径会弄坏 aapt2）
 python tools\build_manual.py
-# 产物: build\apk\dsh-mobile-v2.5-debug.apk
+# 产物: build\apk\dsh-mobile-v2.6-debug.apk
 ```
 
 构建脚本首次运行会自动生成 `tools\debug.keystore`（已 gitignore，请勿提交）。
@@ -73,7 +73,7 @@ python tools\build_manual.py
 ## 安装与使用
 
 ```powershell
-adb install -r build\apk\dsh-mobile-v2.5-debug.apk
+adb install -r build\apk\dsh-mobile-v2.6-debug.apk
 ```
 
 - 真机（vivo/国产 ROM）安装会弹确认框，`tools\install_apk.ps1` 会通过 uiautomator 自动点击「已了解风险」+「继续安装」。
@@ -92,7 +92,7 @@ adb install -r build\apk\dsh-mobile-v2.5-debug.apk
 | 交互式终端 / 图像附件 / 沙箱隔离 | 仍无对应原生原语（node-pty/sharp/landlock 无 arm64 产物），已打 stub，调用时干净报错而非崩溃；bash 工具不受影响 |
 | 体积 | APK 约 64MB，解压后占用约 300MB |
 | 服务生命周期 | node 进程随 App 进程存活；被系统杀掉后重新打开 App 会自动拉起 |
-| UI | 移动端补丁层已修主要布局冲突（输入栏/侧边栏/详情抽屉/悬浮按钮），细节仍在打磨 |
+| UI | 移动端补丁层已修主要布局冲突（输入栏/侧边栏/详情抽屉/悬浮按钮）；原生界面（设置/收纳箱/菜单/启动页）统一 DeepSeek 灰色单风格，深浅模式同一套 |
 
 ## 许可
 

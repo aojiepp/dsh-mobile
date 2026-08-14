@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- DeepSeek 风格单一样式：灰色底 + DeepSeek 蓝主色（无深浅双主题） -->
     <color name="brand_primary">#4D6BFE</color>
-    <color name="brand_dark">#2B3EA7</color>
+    <color name="brand_dark">#3B53E4</color>
     <color name="brand_accent">#6C8BFF</color>
-    <color name="window_bg">#F7F8FA</color>
+    <color name="window_bg">#F5F6F8</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text_primary">#303133</color>
+    <color name="text_secondary">#909399</color>
+    <color name="divider">#E5E6EB</color>
+    <color name="danger">#F04438</color>
+    <color name="danger_border">#F6D5D1</color>
+    <color name="pressed_bg">#EEF0F5</color>
     <color name="ic_launcher_bg">#1E2A6B</color>
 </resources>

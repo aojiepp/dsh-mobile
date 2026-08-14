@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
     public static final String MODE_LOCAL = "local";
     public static final String MODE_PC = "pc";
     public static final String DEFAULT_URL = "http://127.0.0.1:3080";
-    public static final String VERSION = "2.5";
+    public static final String VERSION = "2.6";
 
     private WebView web;
     private ProgressBar progress;
@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private String lastLoadedUrl = "";
 
-    /** 悬浮控制按钮（⚙），注入到页面右上，点击桥接原生菜单 */
+    /** 悬浮控制按钮（⚙），注入到页面右上，点击桥接原生菜单（DeepSeek 蓝单风格） */
     private static final String FAB_JS =
         "(function(){" +
         "try{" +
@@ -55,15 +55,10 @@ public class MainActivity extends Activity {
         "fab.textContent='\u2699';" +
         "fab.setAttribute('aria-label','DSH Mobile 菜单');" +
         "fab.style.cssText='position:fixed;right:12px;top:64px;z-index:9990;" +
-        "width:40px;height:40px;border-radius:50%;border:1px solid rgba(128,140,200,.35);" +
-        "background:rgba(13,27,62,.85);color:#dbe3ff;font-size:18px;line-height:1;" +
-        "box-shadow:0 2px 10px rgba(0,0,0,.35);';" +
+        "width:40px;height:40px;border-radius:50%;border:1px solid rgba(77,107,254,.35);" +
+        "background:rgba(255,255,255,.92);color:#4D6BFE;font-size:19px;line-height:1;" +
+        "box-shadow:0 2px 10px rgba(31,41,55,.15);';" +
         "fab.onclick=function(){try{DshShell.openMenu();}catch(e){}};" +
-        "var ls=document.createElement('style');" +
-        "ls.textContent='@media (prefers-color-scheme: light){#dsh-fab{" +
-        "background:rgba(255,255,255,.92);color:#2b3ea7;" +
-        "border-color:rgba(20,40,120,.25);box-shadow:0 2px 10px rgba(0,0,0,.18);}}';" +
-        "document.head.appendChild(ls);" +
         "document.body.appendChild(fab);" +
         "}catch(e){}" +
         "})();";

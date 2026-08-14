@@ -123,19 +123,20 @@ public class ArtifactsActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextSize(15);
+        tv.setTextColor(getColor(R.color.text_primary));
         tv.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(18);
-        lp.bottomMargin = dp(6);
+        lp.topMargin = dp(6);
+        lp.bottomMargin = dp(8);
         tv.setLayoutParams(lp);
         container.addView(tv);
         if (root != null) {
-            Button all = new Button(this);
+            Button all = new Button(new android.view.ContextThemeWrapper(this, R.style.DshButtonPrimary));
             all.setText(R.string.btn_extract_all);
             LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            blp.bottomMargin = dp(6);
+            blp.bottomMargin = dp(8);
             all.setLayoutParams(blp);
             final String prefix = relPrefix;
             all.setOnClickListener(new View.OnClickListener() {
@@ -150,7 +151,12 @@ public class ArtifactsActivity extends Activity {
     private void addSessionHeader(final File sessionDir, List<File> files, String wsName) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dp(6), 0, dp(2));
+        row.setPadding(dp(12), dp(10), dp(12), dp(10));
+        row.setBackgroundResource(R.drawable.bg_card);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rlp.bottomMargin = dp(8);
+        row.setLayoutParams(rlp);
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
@@ -161,6 +167,7 @@ public class ArtifactsActivity extends Activity {
         TextView name = new TextView(this);
         name.setText("会话 " + shortId(sessionDir.getName()));
         name.setTextSize(13);
+        name.setTextColor(getColor(R.color.text_primary));
         name.setTypeface(null, android.graphics.Typeface.BOLD);
         left.addView(name);
 
@@ -169,26 +176,30 @@ public class ArtifactsActivity extends Activity {
         for (File f : files) total += f.length();
         meta.setText(fmtDate(sessionDir.lastModified()) + " · " + files.size() + " 个文件 · " + fmtSize(total));
         meta.setTextSize(11);
-        meta.setTextColor(0xFF888888);
+        meta.setTextColor(getColor(R.color.text_secondary));
         left.addView(meta);
 
         row.addView(left);
 
         final String prefix = "sessions/" + wsName + "/" + sessionDir.getName();
-        row.addView(makeButton(R.string.btn_extract, new View.OnClickListener() {
+        row.addView(makeButton(R.string.btn_extract, R.style.DshButtonPrimary, new View.OnClickListener() {
             @Override public void onClick(View v) { extractTree(sessionDir, prefix); }
         }));
-        row.addView(makeButton(R.string.btn_delete, new View.OnClickListener() {
+        row.addView(makeButton(R.string.btn_delete, R.style.DshButtonDanger, new View.OnClickListener() {
             @Override public void onClick(View v) { confirmDelete(sessionDir, "会话 " + shortId(sessionDir.getName()), true); }
         }));
         container.addView(row);
-        addDivider();
     }
 
     private void addRow(final File f, final String rel) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(dp(16), dp(6), 0, dp(6));
+        row.setPadding(dp(12), dp(10), dp(12), dp(10));
+        row.setBackgroundResource(R.drawable.bg_card);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rlp.bottomMargin = dp(8);
+        row.setLayoutParams(rlp);
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
@@ -199,32 +210,32 @@ public class ArtifactsActivity extends Activity {
         TextView name = new TextView(this);
         name.setText(f.getName());
         name.setTextSize(13);
+        name.setTextColor(getColor(R.color.text_primary));
         left.addView(name);
 
         TextView meta = new TextView(this);
         meta.setText(fmtDate(f.lastModified()) + " · " + fmtSize(f.length()));
         meta.setTextSize(11);
-        meta.setTextColor(0xFF888888);
+        meta.setTextColor(getColor(R.color.text_secondary));
         left.addView(meta);
 
         row.addView(left);
-        row.addView(makeButton(R.string.btn_extract, new View.OnClickListener() {
+        row.addView(makeButton(R.string.btn_extract, R.style.DshButtonPrimary, new View.OnClickListener() {
             @Override public void onClick(View v) { extractOne(f, rel); }
         }));
-        row.addView(makeButton(R.string.btn_delete, new View.OnClickListener() {
+        row.addView(makeButton(R.string.btn_delete, R.style.DshButtonDanger, new View.OnClickListener() {
             @Override public void onClick(View v) { confirmDelete(f, f.getName(), false); }
         }));
         container.addView(row);
-        addDivider();
     }
 
-    private Button makeButton(int textRes, View.OnClickListener listener) {
-        Button b = new Button(this);
+    private Button makeButton(int textRes, int styleRes, View.OnClickListener listener) {
+        Button b = new Button(new android.view.ContextThemeWrapper(this, styleRes));
         b.setText(textRes);
         b.setTextSize(12);
         b.setMinWidth(0);
         b.setMinHeight(0);
-        b.setPadding(dp(10), dp(2), dp(10), dp(2));
+        b.setPadding(dp(12), dp(4), dp(12), dp(4));
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         blp.leftMargin = dp(8);
@@ -237,18 +248,9 @@ public class ArtifactsActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextSize(13);
-        tv.setTextColor(0xFF888888);
-        tv.setPadding(dp(16), 0, 0, dp(8));
+        tv.setTextColor(getColor(R.color.text_secondary));
+        tv.setPadding(dp(14), 0, 0, dp(8));
         container.addView(tv);
-    }
-
-    private void addDivider() {
-        View v = new View(this);
-        v.setBackgroundColor(0x22000000);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 1);
-        v.setLayoutParams(lp);
-        container.addView(v);
     }
 
     // ---------- 提取 ----------

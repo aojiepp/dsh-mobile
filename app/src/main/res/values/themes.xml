@@ -1,20 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 单一 DeepSeek 灰色风格：深浅两种均已合并为一套，夜间模式不再切换 -->
+
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">@color/brand_primary</item>
-        <item name="android:colorPrimaryDark">@color/brand_dark</item>
-        <item name="android:colorAccent">@color/brand_accent</item>
+        <item name="android:colorPrimaryDark">@color/window_bg</item>
+        <item name="android:colorAccent">@color/brand_primary</item>
         <item name="android:windowBackground">@color/window_bg</item>
         <item name="android:statusBarColor">@color/window_bg</item>
-        <item name="android:navigationBarColor">@color/window_bg</item>
+        <item name="android:navigationBarColor">@color/surface</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
     </style>
 
-    <style name="SettingsTheme" parent="android:Theme.Material.Light.DarkActionBar">
-        <item name="android:colorPrimary">@color/brand_primary</item>
-        <item name="android:colorPrimaryDark">@color/brand_dark</item>
-        <item name="android:colorAccent">@color/brand_accent</item>
+    <!-- 设置/收纳箱：灰色顶栏与背景融为一体，深色文字，无深色 ActionBar -->
+    <style name="SettingsTheme" parent="android:Theme.Material.Light">
+        <item name="android:colorPrimary">@color/window_bg</item>
+        <item name="android:colorPrimaryDark">@color/window_bg</item>
+        <item name="android:colorAccent">@color/brand_primary</item>
         <item name="android:windowBackground">@color/window_bg</item>
+        <item name="android:statusBarColor">@color/window_bg</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+    </style>
+
+    <!-- 控件风格：圆角蓝主按钮 / 灰边次按钮 / 红字危险按钮 / 圆角输入框 -->
+    <style name="DshButtonPrimary" parent="android:Widget.Material.Button">
+        <item name="android:background">@drawable/bg_button_primary</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="DshButtonSecondary" parent="android:Widget.Material.Button">
+        <item name="android:background">@drawable/bg_button_secondary</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="DshButtonDanger" parent="android:Widget.Material.Button">
+        <item name="android:background">@drawable/bg_button_danger</item>
+        <item name="android:textColor">@color/danger</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="DshInput" parent="android:Widget.EditText">
+        <item name="android:background">@drawable/bg_input</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_secondary</item>
     </style>
 </resources>

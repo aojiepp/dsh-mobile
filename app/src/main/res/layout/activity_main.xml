@@ -14,6 +14,8 @@
         android:layout_width="match_parent"
         android:layout_height="3dp"
         android:layout_gravity="top"
+        android:progressTint="@color/brand_primary"
+        android:progressBackgroundTint="@color/divider"
         android:visibility="gone" />
 
     <LinearLayout
@@ -24,7 +26,8 @@
         android:orientation="vertical"
         android:gravity="center"
         android:padding="24dp"
-        android:background="?android:attr/colorBackground"
+        android:background="@drawable/bg_card"
+        android:layout_margin="20dp"
         android:visibility="gone">
 
         <TextView
@@ -32,21 +35,25 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/error_connect"
+            android:textColor="@color/text_primary"
             android:textSize="15sp"
             android:gravity="center"
             android:lineSpacingExtra="4dp" />
 
         <Button
             android:id="@+id/btn_retry"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="@string/btn_retry" />
+            android:text="@string/btn_retry"
+            style="@style/DshButtonPrimary" />
 
         <Button
             android:id="@+id/btn_settings"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/btn_settings" />
+            android:layout_marginTop="10dp"
+            android:text="@string/btn_settings"
+            style="@style/DshButtonSecondary" />
     </LinearLayout>
 </FrameLayout>
