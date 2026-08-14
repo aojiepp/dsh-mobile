@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
     public static final String MODE_LOCAL = "local";
     public static final String MODE_PC = "pc";
     public static final String DEFAULT_URL = "http://127.0.0.1:3080";
-    public static final String VERSION = "2.3";
+    public static final String VERSION = "2.4";
 
     private WebView web;
     private ProgressBar progress;

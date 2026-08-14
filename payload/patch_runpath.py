@@ -54,8 +54,8 @@ def patch_runpath(path, new_rpath):
 
 if __name__ == '__main__':
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'termux', 'usr')
-    node = os.path.join(root, 'bin', 'node')
-    patch_runpath(node, '$ORIGIN/../lib')
+    for fn in sorted(os.listdir(os.path.join(root, 'bin'))):
+        patch_runpath(os.path.join(root, 'bin', fn), '$ORIGIN/../lib')
     libdir = os.path.join(root, 'lib')
     for fn in sorted(os.listdir(libdir)):
         patch_runpath(os.path.join(libdir, fn), '$ORIGIN')

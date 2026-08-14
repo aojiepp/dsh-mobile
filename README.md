@@ -2,7 +2,7 @@
 
 在 Android 手机上**独立运行完整 DeepSeek Harness（DSH）**的开源实现：一个原生 WebView 壳 + 内嵌 aarch64 Node.js 运行时 + 裁剪后的 DSH 依赖树。手机自己启动 DSH 服务（`127.0.0.1:3080`），不依赖电脑，可离线于 PC 使用。
 
-> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；界面细节（布局、交互打磨）继续迭代中，欢迎 issue / PR。
+> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；v2.4 起 **bash / write / glob / grep 工具全部可用**（内置 GNU bash 5.3 + ripgrep 15.2，并修复了 Android 上 `link()` 被 SELinux 禁止导致的写文件失败）；界面细节（布局、交互打磨）继续迭代中，欢迎 issue / PR。
 
 ## 工作原理
 
@@ -20,8 +20,8 @@
 ```
 
 - **WebView 壳**：加载 `http://127.0.0.1:3080`，注入移动端补丁层（窄屏布局修复、侧边栏抽屉化、悬浮 ⚙ 菜单），不修改 DSH 前端源码。
-- **内置服务**：Termux 官方仓库的 aarch64 Node 二进制 + 依赖 `.so`（RUNPATH 改写为 `$ORIGIN` 相对路径），由前台服务 spawn，进程随应用存活。
-- **DSH 依赖树**：从 npm 全局安装的 DSH checkout 裁剪（去掉桌面专用原生模块并打 stub、剥离 sourcemap/文档），功能与桌面版一致。
+- **内置服务**：Termux 官方仓库的 aarch64 Node + GNU bash + ripgrep 二进制及依赖 `.so`（RUNPATH 改写为 `$ORIGIN` 相对路径），由前台服务 spawn，进程随应用存活。
+- **DSH 依赖树**：从 npm 全局安装的 DSH checkout 裁剪（去掉桌面专用原生模块并打 stub、剥离 sourcemap/文档、注入 Android 文件系统补丁与 ripgrep aarch64 平台包），功能与桌面版一致。
 - **双模式**：设置页可切换「本机内置服务」/「连接电脑上的 DSH」（后者保留原 adb reverse / 局域网 IP 方式）。
 
 ## 目录结构
@@ -51,9 +51,9 @@ dsh-mobile/
 需要：Windows、JDK 17、Android SDK（`C:\Android`，build-tools 34 + android-34）、Python 3、网络（仅首次下载 Termux .deb）。
 
 ```powershell
-# 1. 下载并解包 Termux nodejs 运行时（node + 依赖 .so + CA 证书，约 92MB）
+# 1. 下载并解包 Termux 运行时（node + bash + ripgrep + 依赖 .so + CA 证书）
 python payload\extract_termux.py extract
-#    .deb 下载地址见 extract_termux.py 内注释；也可手动放入 payload\debs\
+#    .deb 下载地址见 extract_termux.py 顶部注释；也可手动放入 payload\debs\
 
 # 2. 裁剪 DSH 依赖树（从 npm 全局 checkout 复制并瘦身，约 87MB）
 python payload\prepare_dsh_tree.py C:\Users\<you>\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh
@@ -64,7 +64,7 @@ copy payload\payload.zip app\src\main\assets\payload.zip
 
 # 4. 构建 APK（构建目录必须是 ASCII 路径，中文路径会弄坏 aapt2）
 python tools\build_manual.py
-# 产物: build\apk\dsh-mobile-v2.3-debug.apk
+# 产物: build\apk\dsh-mobile-v2.4-debug.apk
 ```
 
 构建脚本首次运行会自动生成 `tools\debug.keystore`（已 gitignore，请勿提交）。
@@ -72,7 +72,7 @@ python tools\build_manual.py
 ## 安装与使用
 
 ```powershell
-adb install -r build\apk\dsh-mobile-v2.3-debug.apk
+adb install -r build\apk\dsh-mobile-v2.4-debug.apk
 ```
 
 - 真机（vivo/国产 ROM）安装会弹确认框，`tools\install_apk.ps1` 会通过 uiautomator 自动点击「已了解风险」+「继续安装」。
@@ -85,9 +85,10 @@ adb install -r build\apk\dsh-mobile-v2.3-debug.apk
 | 项 | 说明 |
 |---|---|
 | targetSdk **28** | Android 10+ 对 targetSdk≥29 的应用禁止执行私有目录二进制（SELinux exec）；28 是 Termux 同款解法（自分发应用，无 Play 上架要求） |
-| 硬链接 `link()` 不可用 | Android SELinux 禁止应用硬链接；DSH 会话/附件落盘的原子发布已改写为 `rename()`（见 `payload/patch_android_fs.py`） |
-| bash 终端 / 图像附件 / 沙箱隔离 | Android 无对应原生原语（node-pty/sharp/landlock 无 arm64 产物），已打 stub，调用时干净报错而非崩溃 |
-| 体积 | APK 约 59MB，解压后占用约 280MB |
+| 硬链接 `link()` 不可用 | Android SELinux 禁止应用硬链接；DSH 会话/附件落盘的原子发布、write 工具的新建文件路径均已改写为 `rename()`（见 `payload/patch_android_fs.py`） |
+| bash / glob / grep | v2.4 已内置 GNU bash 5.3 与 ripgrep 15.2（Termux aarch64），并注入了 `@vscode/ripgrep-android-arm64` 平台包（Android 的 node 报告 `process.platform === "android"`，非 linux）；四工具真机 PASS |
+| 交互式终端 / 图像附件 / 沙箱隔离 | 仍无对应原生原语（node-pty/sharp/landlock 无 arm64 产物），已打 stub，调用时干净报错而非崩溃；bash 工具不受影响 |
+| 体积 | APK 约 62MB，解压后占用约 300MB |
 | 服务生命周期 | node 进程随 App 进程存活；被系统杀掉后重新打开 App 会自动拉起 |
 | UI | 移动端补丁层已修主要布局冲突（输入栏/侧边栏/详情抽屉/悬浮按钮），细节仍在打磨 |
 

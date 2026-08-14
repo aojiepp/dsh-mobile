@@ -297,10 +297,12 @@ public class DshServerService extends Service {
                 } finally {
                     zf.close();
                 }
-                // 3. node 置可执行位
-                File node = nodeBin(this);
-                if (!node.setExecutable(true, false)) {
-                    Log.w(TAG, "setExecutable returned false, continuing");
+                // 3. 可执行位：node + bash + rg（zip 解压不保留权限）
+                for (String bin : new String[]{"node", "bash", "rg"}) {
+                    File b = new File(new File(payloadDir(this), "termux/usr/bin"), bin);
+                    if (b.exists() && !b.setExecutable(true, false)) {
+                        Log.w(TAG, "setExecutable returned false: " + bin);
+                    }
                 }
                 // 4. 完成标记
                 File marker = new File(root, PAYLOAD_MARKER);

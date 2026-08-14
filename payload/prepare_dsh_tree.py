@@ -109,11 +109,12 @@ def main():
 
     print("copy checkout (no nested node_modules):", checkout)
     shutil.copytree(checkout, dst, ignore=shutil.ignore_patterns("node_modules"),
-                    symlinks=True)
+                    symlinks=True, dirs_exist_ok=True)
 
     print("copy nested node_modules ...")
     shutil.copytree(os.path.join(checkout, "node_modules"),
-                    os.path.join(dst, "node_modules"), symlinks=True)
+                    os.path.join(dst, "node_modules"), symlinks=True,
+                    dirs_exist_ok=True)
 
     nm = os.path.join(dst, "node_modules")
     for pkg in REMOVE_PACKAGES:
@@ -140,6 +141,29 @@ def main():
                         and d != "node-addon-require-builtin"):
                     shutil.rmtree(os.path.join(scopedir, d), ignore_errors=True)
                     print("removed platform pkg:", d)
+
+    # v2.4: ripgrep 平台包。@vscode/ripgrep 按 process.platform-process.arch 解析
+    # @vscode/ripgrep-<platform>-<arch>/bin/rg。注意：Android 上的 node 报告
+    # process.platform === "android"（不是 "linux"），所以要提供
+    # @vscode/ripgrep-android-arm64（同时保留 linux-arm64 以防 arch 探测差异）。
+    # 用 Termux 前缀里的 aarch64 rg 构造该包；其余平台的 ripgrep 包在 Android
+    # 上无用，一并移除。
+    rg_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'termux', 'usr', 'bin', 'rg')
+    RG_PLATFORM_PKGS = ('ripgrep-android-arm64', 'ripgrep-linux-arm64')
+    vscode_dir = os.path.join(nm, '@vscode')
+    for d in list(os.listdir(vscode_dir)):
+        if d.startswith("ripgrep-") and d not in RG_PLATFORM_PKGS:
+            shutil.rmtree(os.path.join(vscode_dir, d), ignore_errors=True)
+            print("removed foreign rg platform pkg:", d)
+    for pkg in RG_PLATFORM_PKGS:
+        rgdir = os.path.join(vscode_dir, pkg)
+        os.makedirs(os.path.join(rgdir, 'bin'), exist_ok=True)
+        shutil.copy2(rg_bin, os.path.join(rgdir, 'bin', 'rg'))
+        with open(os.path.join(rgdir, 'package.json'), 'w', encoding='utf-8',
+                  newline='\n') as f:
+            f.write('{"name":"@vscode/ripgrep-%s","version":"15.2.0"}\n' % pkg.replace('ripgrep-', ''))
+        print("created rg platform pkg: @vscode/" + pkg)
 
     strip_tree(nm)
 
