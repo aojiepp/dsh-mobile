@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DSH Mobile</string>
+    <string name="settings_title">设置</string>
+    <string name="menu_refresh">刷新</string>
+    <string name="menu_settings">设置</string>
+    <string name="menu_desktop">桌面版布局</string>
+    <string name="dlg_desktop">桌面版布局</string>
+    <string name="dlg_keep">保持屏幕常亮</string>
+    <string name="desktop_on">已切换桌面版布局，正在重载</string>
+    <string name="desktop_off">已切回移动版布局，正在重载</string>
+    <string name="btn_retry">重试</string>
+    <string name="btn_settings">打开设置</string>
+    <string name="btn_save">保存</string>
+    <string name="label_server_url">服务地址</string>
+    <string name="label_keep_on">保持屏幕常亮</string>
+    <string name="saved">已保存</string>
+    <string name="error_connect">无法连接到 DSH 服务\n\n请确认：\n1. 电脑上 DSH 已启动（默认端口 3080）\n2. 电脑上已执行：adb reverse tcp:3080 tcp:3080\n（USB 重新连接后需重跑一次）</string>
+    <string name="hint_adb">手机连接提示：\n在电脑上执行 adb reverse tcp:3080 tcp:3080\n即可让手机通过 127.0.0.1:3080 访问电脑上的 DSH。\n也可在服务地址中填写电脑的局域网 IP:3080。</string>
+
+    <!-- v2.0 内置服务 -->
+    <string name="label_mode">运行模式</string>
+    <string name="mode_local">本机内置服务（无需电脑）</string>
+    <string name="mode_pc">连接电脑上的 DSH</string>
+    <string name="label_api_key">DeepSeek API Key（可留空，稍后在 DSH 界面的设置里填也可以）</string>
+    <string name="hint_api_key">Key 会写入手机本机的 DSH 凭据目录，只保存在这台手机上。</string>
+    <string name="label_server_status">内置服务状态</string>
+    <string name="btn_restart_server">重启内置服务</string>
+    <string name="status_no_info">（尚未启动）</string>
+    <string name="status_extracting">正在解压内置服务（首次启动，约 1-3 分钟）…</string>
+    <string name="status_ready">已就绪，等待启动</string>
+    <string name="status_starting">正在启动…</string>
+    <string name="status_running">运行中（127.0.0.1:3080）</string>
+    <string name="status_exited">已退出（请查看重启日志）</string>
+    <string name="status_failed">启动失败（请重试或检查存储空间）</string>
+    <string name="status_stopped">已停止</string>
+    <string name="bootstrap_text">正在准备手机内置 DSH 服务…\n\n首次启动需要解压约 180MB 运行时\n（约 1-3 分钟，之后秒开）。</string>
+    <string name="notif_channel">DSH 内置服务</string>
+    <string name="notif_channel_desc">在手机上运行 DeepSeek Harness 本机服务</string>
+    <string name="notif_title">DSH 服务运行中</string>
+    <string name="notif_text">手机内置 DSH 正在 127.0.0.1:3080 提供服务</string>
+    <string name="saved_local">已保存，正在启动内置服务…</string>
+    <string name="error_local">内置 DSH 服务启动失败\n\n可在「设置」里查看服务状态与日志。</string>
+    <string name="perm_notif">DSH Mobile 需要通知权限来保持内置服务在前台运行。</string>
+</resources>

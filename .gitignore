@@ -1,0 +1,29 @@
+# 构建产物
+build/
+*.idsig
+*.apk
+
+# 签名密钥（构建脚本首次运行会自动生成 debug.keystore，请勿提交）
+tools/debug.keystore
+
+# payload 运行时与依赖树 —— 全部由 payload/ 管线脚本生成，不入库：
+#   payload/termux/       解包后的 Termux Node 运行时（node + .so）
+#   payload/debs/         下载的 .deb 包
+#   payload/payload.zip   打包产物（复制到 app/src/main/assets/ 参与构建）
+payload/payload.zip
+payload/termux/
+payload/debs/
+payload/nodejs.deb
+payload/Packages*
+payload/node
+
+app/src/main/assets/payload.zip
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 系统/编辑器噪音
+.DS_Store
+Thumbs.db
+*.log
