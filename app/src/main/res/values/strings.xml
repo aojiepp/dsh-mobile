@@ -42,4 +42,24 @@
     <string name="saved_local">已保存，正在启动内置服务…</string>
     <string name="error_local">内置 DSH 服务启动失败\n\n可在「设置」里查看服务状态与日志。</string>
     <string name="perm_notif">DSH Mobile 需要通知权限来保持内置服务在前台运行。</string>
+
+    <!-- v2.5 收纳箱 -->
+    <string name="artifacts_title">收纳箱</string>
+    <string name="artifacts_hint">智能体产物与对话记录都在应用私有目录里，普通文件管理器看不到。\n「提取」会复制到手机 Download/dsh-export/ 目录；「删除」立即生效且不可恢复。</string>
+    <string name="cat_workspace">工作台产物（agent 在工作区生成的文件）</string>
+    <string name="cat_sessions">会话记录（对话转录 session.jsonl.zstd）</string>
+    <string name="artifacts_empty">（暂无）</string>
+    <string name="artifacts_stat">共 %1$d 个文件</string>
+    <string name="btn_extract">提取</string>
+    <string name="btn_delete">删除</string>
+    <string name="btn_extract_all">全部提取</string>
+    <string name="extract_ok">已导出：Download/dsh-export/%1$s</string>
+    <string name="extract_all_ok">已提取 %1$d / %2$d 个文件到 Download/dsh-export/</string>
+    <string name="extract_fail">导出失败（%1$s）</string>
+    <string name="delete_ok">已删除</string>
+    <string name="delete_fail">删除失败</string>
+    <string name="delete_confirm">删除后无法恢复，确定删除「%1$s」？</string>
+    <string name="dlg_delete">删除</string>
+    <string name="dlg_cancel">取消</string>
+    <string name="perm_storage">需要「存储」权限才能把产物导出到 Download 目录。</string>
 </resources>

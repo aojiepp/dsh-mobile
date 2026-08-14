@@ -1,0 +1,11 @@
+v2.5: add ArtifactsActivity (artifact box) in settings
+
+- new ArtifactsActivity: browse agent products by category
+  (workspace files / session transcripts), grouped by session id
+- per-file actions: extract (copy to Download/dsh-export/, file manager
+  visible; direct write with MediaStore fallback) and delete (with confirm)
+- workspace category has extract-all; session groups have extract/delete
+- WRITE_EXTERNAL_STORAGE permission (targetSdk 28 legacy storage model)
+- entry: Settings -> 收纳箱 button; version 2.5 (code 21)
+- verified on device via uiautomator: list, extract snake.html + session
+  jsonl.zstd to Download, delete probe_v24.txt with confirm dialog

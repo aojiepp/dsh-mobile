@@ -62,6 +62,12 @@ public class SettingsActivity extends Activity {
             @Override public void onClick(View v) { restartServer(); }
         });
 
+        findViewById(R.id.btn_artifacts).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent(SettingsActivity.this, ArtifactsActivity.class));
+            }
+        });
+
         refreshStatus();
 
         TextView version = findViewById(R.id.version);

@@ -117,10 +117,17 @@
             android:lineSpacingExtra="3dp" />
 
         <Button
+            android:id="@+id/btn_artifacts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/artifacts_title" />
+
+        <Button
             android:id="@+id/btn_save"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="16dp"
             android:text="@string/btn_save" />
 
         <TextView
