@@ -19,8 +19,8 @@ ZIPALIGN = os.path.join(BT, "zipalign.exe")
 APKSIGNER_JAR = os.path.join(BT, "lib", "apksigner.jar")
 D8_JAR = os.path.join(BT, "lib", "d8.jar")
 
-VERSION_CODE = 22
-VERSION_NAME = "2.6"
+VERSION_CODE = 23
+VERSION_NAME = "2.7"
 APK_NAME = "dsh-mobile-v%s-debug.apk" % VERSION_NAME
 
 JAVA_HOME = os.environ.get("JAVA_HOME", "")

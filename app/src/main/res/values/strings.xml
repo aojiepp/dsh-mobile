@@ -15,8 +15,29 @@
     <string name="label_server_url">服务地址</string>
     <string name="label_keep_on">保持屏幕常亮</string>
     <string name="saved">已保存</string>
-    <string name="error_connect">无法连接到 DSH 服务\n\n请确认：\n1. 电脑上 DSH 已启动（默认端口 3080）\n2. 电脑上已执行：adb reverse tcp:3080 tcp:3080\n（USB 重新连接后需重跑一次）</string>
-    <string name="hint_adb">手机连接提示：\n在电脑上执行 adb reverse tcp:3080 tcp:3080\n即可让手机通过 127.0.0.1:3080 访问电脑上的 DSH。\n也可在服务地址中填写电脑的局域网 IP:3080。</string>
+    <string name="saved_testing">已保存，正在检测与电脑的连接（结果见下方）</string>
+    <string name="status_pc_note">内置服务未启用（当前为「连接电脑」模式）</string>
+    <string name="error_connect">无法连接到 DSH 服务</string>
+    <string name="error_connect_hint_local">手机内置服务异常。\n可在「设置」里查看服务状态并重启。</string>
+    <string name="error_connect_hint_loopback">当前地址是本机回环地址（127.0.0.1），\n「连接电脑」模式下它指向手机自己，\n除非电脑端建了 adb reverse 隧道。\n\n请检查：\n1. 手机与电脑用 USB 连接、adb 正常\n2. 电脑上执行：adb reverse tcp:3080 tcp:3080\n   （或双击仓库 tools\\pc_bridge.bat 自动维持）\n3. 服务地址填 http://127.0.0.1:3080\n\n连接恢复后本页会自动重连。</string>
+    <string name="error_connect_hint_lan">当前地址是局域网地址，但电脑上的 DSH Web\n默认只监听本机（127.0.0.1），不响应局域网直连。\n\n二选一：\n• 改走 USB（推荐）：服务地址填\n  http://127.0.0.1:3080，电脑执行\n  adb reverse tcp:3080 tcp:3080\n• 或让电脑端 DSH 重启时绑定局域网地址：\n  dsh web --host &lt;电脑IP&gt; --trusted-host &lt;电脑IP&gt;:3080\n  （会把控制能力暴露给局域网，注意安全）\n\n连接恢复后本页会自动重连。</string>
+    <string name="err_timeout">连接超时：网络不可达或电脑端未响应</string>
+    <string name="err_connect">无法建立连接：该端口没有服务在监听</string>
+    <string name="err_host">地址解析失败</string>
+    <string name="err_http">服务器返回 HTTP %1$d</string>
+    <string name="hint_pc">连接电脑（USB 推荐）：\n1. 电脑上保持 DSH Web 运行（127.0.0.1:3080）\n2. 手机用数据线连电脑，电脑执行：\n   adb reverse tcp:3080 tcp:3080\n   （或双击仓库 tools\\pc_bridge.bat 自动维持隧道）\n3. 服务地址填 http://127.0.0.1:3080，点「测试连接」\n\n无线连接：电脑端 DSH 需带 --host &lt;电脑IP&gt;\n--trusted-host &lt;电脑IP&gt;:3080 重启，手机填\nhttp://&lt;电脑IP&gt;:3080（会把控制能力暴露给局域网）。</string>
+    <string name="label_pc_test">连接检测</string>
+    <string name="btn_test_conn">测试连接</string>
+    <string name="pc_status_idle">点击「测试连接」检测与电脑的连通性。</string>
+    <string name="pc_status_testing">检测中…</string>
+    <string name="pc_status_ok">✅ 已连通：确认是 DSH Web 服务（HTTP 200）</string>
+    <string name="pc_status_ok_unknown">✅ 端口可达（HTTP 200），但响应不像 DSH Web，请核对地址</string>
+    <string name="pc_status_refused">❌ 连接被拒绝：该地址没有 DSH 服务在监听。\n• 填 127.0.0.1 时：请先在电脑执行\n  adb reverse tcp:3080 tcp:3080\n• 填局域网 IP 时：电脑端 DSH 默认只监听本机，\n  需带 --host 重启后才能被局域网访问</string>
+    <string name="pc_status_timeout">❌ 连接超时：网络不可达。\n检查 IP 是否写对、手机与电脑是否同一网络、\n电脑防火墙是否放行端口。</string>
+    <string name="pc_status_host">❌ 地址无法解析，请检查拼写</string>
+    <string name="pc_status_ssl">❌ TLS/证书错误（自签名 https 不受信任）</string>
+    <string name="pc_status_http">⚠️ 服务返回 HTTP %1$d，页面可能异常</string>
+    <string name="pc_status_err">❌ 检测失败：%1$s</string>
 
     <!-- v2.0 内置服务 -->
     <string name="label_mode">运行模式</string>

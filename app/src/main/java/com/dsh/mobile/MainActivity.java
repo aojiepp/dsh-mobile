@@ -7,8 +7,10 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.View;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -36,7 +38,7 @@ public class MainActivity extends Activity {
     public static final String MODE_LOCAL = "local";
     public static final String MODE_PC = "pc";
     public static final String DEFAULT_URL = "http://127.0.0.1:3080";
-    public static final String VERSION = "2.6";
+    public static final String VERSION = "2.7";
 
     private WebView web;
     private ProgressBar progress;
@@ -44,6 +46,14 @@ public class MainActivity extends Activity {
     private TextView errorText;
     private SharedPreferences prefs;
     private String lastLoadedUrl = "";
+    private final Handler retryHandler = new Handler();
+    private Runnable retryTask;
+    private int errorCount = 0;
+    private long lastPauseAt = 0;
+    /** 本次加载是否已失败（onPageFinished 也会在失败后回调，需区分真成功） */
+    private boolean loadFailed = false;
+    /** 上次 onResume 时的运行模式，用于检测用户在设置页切换了模式 */
+    private String lastMode = "";
 
     /** 悬浮控制按钮（⚙），注入到页面右上，点击桥接原生菜单（DeepSeek 蓝单风格） */
     private static final String FAB_JS =
@@ -212,6 +222,7 @@ public class MainActivity extends Activity {
 
         setupWebView();
         requestNotificationPermission();
+        lastMode = localMode() ? MODE_LOCAL : MODE_PC;
 
         if (localMode()) {
             // 本机内置服务模式：确保前台服务在跑，等端口可用后加载页面
@@ -232,6 +243,8 @@ public class MainActivity extends Activity {
             }
             waitLocalAndLoad();
         } else {
+            // 连接电脑模式：停掉本机服务，把 127.0.0.1:3080 让给 adb reverse 隧道
+            stopLocalServer();
             if (savedInstanceState != null) {
                 web.restoreState(savedInstanceState);
                 String u = web.getUrl();
@@ -340,23 +353,42 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                loadFailed = false;
                 errorView.setVisibility(View.GONE);
             }
             @Override
             public void onPageFinished(WebView view, String url) {
                 progress.setVisibility(View.GONE);
-                String tweaks = FAB_JS
-                        + (desktopMode() ? TWEAKS_DESKTOP : (PATCH_JS + TWEAKS_MOBILE));
-                view.evaluateJavascript(tweaks, null);
+                // chrome 失败页也会回调 onPageFinished：它不是成功，
+                // 不能取消自动重连、不能重置退避计数
+                if (url != null && url.startsWith("chrome-error://")) return;
+                // 有些 WebView 失败时回调的是原地址：再用 JS 查真实地址，
+                // 确认是真成功后（失败页 href 恒为 chrome-error://chromewebdata/）才收尾
+                view.evaluateJavascript("location.href", new ValueCallback<String>() {
+                    @Override public void onReceiveValue(String v) {
+                        if (v != null && v.startsWith("\"chrome-error")) return;
+                        if (loadFailed) return;
+                        errorCount = 0;
+                        cancelAutoRetry();
+                        String tweaks = FAB_JS
+                                + (desktopMode() ? TWEAKS_DESKTOP : (PATCH_JS + TWEAKS_MOBILE));
+                        view.evaluateJavascript(tweaks, null);
+                    }
+                });
             }
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
-                    String desc = "";
-                    if (error != null && error.getDescription() != null) {
-                        desc = error.getDescription().toString();
-                    }
-                    showError(desc);
+                    loadFailed = true;
+                    showError(describeError(error));
+                }
+            }
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request,
+                                            android.webkit.WebResourceResponse response) {
+                if (request.isForMainFrame() && response != null && response.getStatusCode() >= 400) {
+                    loadFailed = true;
+                    showError(getString(R.string.err_http, response.getStatusCode()));
                 }
             }
             @Override
@@ -424,10 +456,74 @@ public class MainActivity extends Activity {
     }
 
     private void showError(String detail) {
-        String msg = getString(R.string.error_connect);
-        if (detail != null && !detail.isEmpty()) msg += "\n\n" + detail;
-        errorText.setText(msg);
+        StringBuilder msg = new StringBuilder(getString(R.string.error_connect));
+        String hint = errorHint();
+        if (!hint.isEmpty()) msg.append("\n\n").append(hint);
+        if (detail != null && !detail.isEmpty()) msg.append("\n\n").append(detail);
+        errorText.setText(msg.toString());
         errorView.setVisibility(View.VISIBLE);
+        errorCount++;
+        android.util.Log.i("DshMobile", "connect error #" + errorCount
+                + " url=" + currentUrl() + " detail=" + detail);
+        if (!localMode()) scheduleAutoRetry();
+    }
+
+    /** 根据运行模式与目标地址给出针对性的排查提示 */
+    private String errorHint() {
+        if (localMode()) return getString(R.string.error_connect_hint_local);
+        String host = hostOf(currentUrl());
+        boolean loopback = "127.0.0.1".equals(host) || "localhost".equals(host)
+                || "::1".equals(host) || "[::1]".equals(host);
+        return loopback ? getString(R.string.error_connect_hint_loopback)
+                        : getString(R.string.error_connect_hint_lan);
+    }
+
+    private static String hostOf(String url) {
+        try {
+            String h = java.net.URI.create(url).getHost();
+            return h == null ? "" : h;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 「连接电脑」模式断网自动重连：3s 起指数退避，上限 30s；
+     *  自续循环，不依赖 onReceivedError 再次回调（WebView 对失败重试
+     *  有时不再报错），真成功由 onPageFinished 的 href 校验取消 */
+    private void scheduleAutoRetry() {
+        cancelAutoRetry();
+        if (localMode()) return;
+        long delay = 3000L << Math.min(errorCount - 1, 3);
+        if (delay > 30000L) delay = 30000L;
+        retryTask = new Runnable() {
+            @Override public void run() {
+                if (web != null) {
+                    web.loadUrl(lastLoadedUrl.isEmpty() ? currentUrl() : lastLoadedUrl);
+                }
+                // 无论本次加载成败，先安排下一次；真成功时由 onPageFinished 取消
+                scheduleAutoRetry();
+            }
+        };
+        retryHandler.postDelayed(retryTask, delay);
+    }
+
+    private void cancelAutoRetry() {
+        if (retryTask != null) {
+            retryHandler.removeCallbacks(retryTask);
+            retryTask = null;
+        }
+    }
+
+    /** 把 WebView 底层错误码翻译成可读信息 */
+    private String describeError(WebResourceError e) {
+        if (e == null) return "";
+        String d = e.getDescription() == null ? "" : e.getDescription().toString();
+        switch (e.getErrorCode()) {
+            case WebViewClient.ERROR_TIMEOUT: return getString(R.string.err_timeout) + "\n" + d;
+            case WebViewClient.ERROR_CONNECT: return getString(R.string.err_connect) + "\n" + d;
+            case WebViewClient.ERROR_HOST_LOOKUP: return getString(R.string.err_host) + "\n" + d;
+            default: return d;
+        }
     }
 
     private void openSettings() {
@@ -439,6 +535,9 @@ public class MainActivity extends Activity {
         super.onResume();
         applyKeepScreenOn();
         web.onResume();
+        String nowMode = localMode() ? MODE_LOCAL : MODE_PC;
+        boolean modeChanged = !nowMode.equals(lastMode);
+        lastMode = nowMode;
         if (localMode()) {
             android.content.Intent svc = new android.content.Intent(this, DshServerService.class);
             svc.setAction(DshServerService.ACTION_START);
@@ -447,13 +546,44 @@ public class MainActivity extends Activity {
             } else {
                 startService(svc);
             }
+        } else {
+            stopLocalServer();
         }
         String want = currentUrl();
         if (!lastLoadedUrl.isEmpty() && !want.equals(lastLoadedUrl)) reload();
+
+        // 「连接电脑」模式恢复策略：报错页立即重连；长时间后台后长连接/流可能已死，重载恢复
+        if (!localMode()) {
+            long idleMs = lastPauseAt > 0 ? System.currentTimeMillis() - lastPauseAt : 0;
+            if (errorView.getVisibility() == View.VISIBLE) {
+                reload();
+            } else if (lastPauseAt > 0 && idleMs > 120000) {
+                reload();
+            }
+        }
+        lastPauseAt = 0;
+
+        // 用户在设置页切换了模式：按新模式重建页面
+        if (modeChanged) {
+            if (localMode()) {
+                waitLocalAndLoad();
+            } else {
+                reload();
+            }
+        }
+    }
+
+    /** 停止本机内置服务，释放 127.0.0.1:3080（「连接电脑」模式的 adb reverse 隧道需要它） */
+    private void stopLocalServer() {
+        android.content.Intent stop = new android.content.Intent(this, DshServerService.class);
+        stop.setAction(DshServerService.ACTION_STOP);
+        startService(stop);
     }
 
     @Override
     protected void onPause() {
+        cancelAutoRetry();
+        lastPauseAt = System.currentTimeMillis();
         web.onPause();
         super.onPause();
     }

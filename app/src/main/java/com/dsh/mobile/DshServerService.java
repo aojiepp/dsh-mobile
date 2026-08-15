@@ -30,6 +30,9 @@ public class DshServerService extends Service {
 
     public static final String ACTION_START = "com.dsh.mobile.action.START_SERVER";
     public static final String ACTION_STOP = "com.dsh.mobile.action.STOP_SERVER";
+    /** 同一实例内原子重启：杀掉旧 node 再拉起新 node，避免 STOP+START 两条命令竞态
+     *  （竞态会让系统误判前台服务 5 秒未 startForeground，直接杀进程） */
+    public static final String ACTION_RESTART = "com.dsh.mobile.action.RESTART_SERVER";
 
     /** SharedPreferences 中的状态值 */
     public static final String STATE_EXTRACTING = "extracting";
@@ -53,6 +56,8 @@ public class DshServerService extends Service {
 
     private Process nodeProcess;
     private volatile boolean stopping = false;
+    /** bootLoop 代际计数：stopNode/重启时递增，旧循环检测到代际变化立即退出 */
+    private volatile int bootGen = 0;
     private Thread worker;
 
     // ---------- 路径工具 ----------
@@ -96,17 +101,30 @@ public class DshServerService extends Service {
         String action = intent != null ? intent.getAction() : ACTION_START;
         if (ACTION_STOP.equals(action)) {
             stopNode();
+            stopSelf();
             return START_NOT_STICKY;
         }
         startForeground(NOTIF_ID, buildNotification());
+        if (ACTION_RESTART.equals(action)) {
+            // 原子重启：同实例内杀旧 node、起新 bootLoop，规避 STOP+START 竞态
+            stopNode();
+            stopping = false;
+            final int gen = ++bootGen;
+            worker = new Thread(new Runnable() {
+                @Override public void run() { bootLoop(gen); }
+            }, "dsh-server");
+            worker.start();
+            return START_STICKY;
+        }
         if (nodeProcess != null && isAlive()) {
             putState(this, KEY_SERVER_STATE, STATE_RUNNING);
             return START_STICKY;
         }
         if (worker == null || !worker.isAlive()) {
             stopping = false;
+            final int gen = ++bootGen;
             worker = new Thread(new Runnable() {
-                @Override public void run() { bootLoop(); }
+                @Override public void run() { bootLoop(gen); }
             }, "dsh-server");
             worker.start();
         }
@@ -125,8 +143,8 @@ public class DshServerService extends Service {
 
     // ---------- 启动循环 ----------
 
-    private void bootLoop() {
-        Log.i(TAG, "bootLoop start");
+    private void bootLoop(int gen) {
+        Log.i(TAG, "bootLoop start gen=" + gen);
         File nodeBin = nodeBin(this);
         File appDir = dshAppDir(this);
         File home = dshHomeDir(this);
@@ -143,7 +161,7 @@ public class DshServerService extends Service {
 
         putState(this, KEY_SERVER_STATE, STATE_STARTING);
         int restarts = 0;
-        while (!stopping) {
+        while (!stopping && gen == bootGen) {
             try {
                 ProcessBuilder pb = new ProcessBuilder(
                         nodeBin.getAbsolutePath(),
@@ -175,7 +193,7 @@ public class DshServerService extends Service {
                 putState(this, KEY_SERVER_STATE, STATE_STARTING);
                 int code = nodeProcess.waitFor();
                 nodeProcess = null;
-                if (stopping) return;
+                if (stopping || gen != bootGen) return;
                 restarts++;
                 Log.w(TAG, "dsh server exited code=" + code + " restart=" + restarts);
                 putState(this, KEY_SERVER_STATE, STATE_EXITED + ":" + code);
@@ -197,6 +215,7 @@ public class DshServerService extends Service {
 
     private void stopNode() {
         stopping = true;
+        bootGen++;
         if (nodeProcess != null) {
             try {
                 nodeProcess.destroy();
@@ -211,7 +230,6 @@ public class DshServerService extends Service {
         }
         nodeProcess = null;
         putState(this, KEY_SERVER_STATE, "stopped");
-        stopSelf();
     }
 
     private boolean isAlive() {

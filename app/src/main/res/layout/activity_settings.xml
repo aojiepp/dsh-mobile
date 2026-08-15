@@ -28,6 +28,7 @@
                 android:textStyle="bold" />
 
             <RadioGroup
+                android:id="@+id/mode_group"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp">
@@ -138,6 +139,26 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/btn_restart_server"
                 style="@style/DshButtonSecondary" />
+
+            <TextView
+                android:id="@+id/pc_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/pc_status_idle"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:lineSpacingExtra="2dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btn_test"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/btn_test_conn"
+                style="@style/DshButtonSecondary"
+                android:visibility="gone" />
         </LinearLayout>
 
         <CheckBox
@@ -150,14 +171,15 @@
             android:textSize="14sp" />
 
         <TextView
-            android:id="@+id/hint_adb"
+            android:id="@+id/hint_conn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="@string/hint_adb"
+            android:text="@string/hint_pc"
             android:textColor="@color/text_secondary"
             android:textSize="12sp"
-            android:lineSpacingExtra="3dp" />
+            android:lineSpacingExtra="3dp"
+            android:visibility="gone" />
 
         <Button
             android:id="@+id/btn_artifacts"

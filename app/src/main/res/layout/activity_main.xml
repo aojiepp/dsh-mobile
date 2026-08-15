@@ -20,25 +20,30 @@
 
     <LinearLayout
         android:id="@+id/error_view"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:orientation="vertical"
-        android:gravity="center"
-        android:padding="24dp"
+        android:padding="20dp"
         android:background="@drawable/bg_card"
-        android:layout_margin="20dp"
+        android:layout_margin="16dp"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/error_text"
-            android:layout_width="wrap_content"
+        <ScrollView
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/error_connect"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp"
-            android:gravity="center"
-            android:lineSpacingExtra="4dp" />
+            android:maxHeight="400dp"
+            android:scrollbars="vertical">
+
+            <TextView
+                android:id="@+id/error_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/error_connect"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:lineSpacingExtra="3dp" />
+        </ScrollView>
 
         <Button
             android:id="@+id/btn_retry"
