@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
     public static final String MODE_LOCAL = "local";
     public static final String MODE_PC = "pc";
     public static final String DEFAULT_URL = "http://127.0.0.1:3080";
-    public static final String VERSION = "2.7";
+    public static final String VERSION = "2.8";
 
     private WebView web;
     private ProgressBar progress;
@@ -52,6 +52,8 @@ public class MainActivity extends Activity {
     private long lastPauseAt = 0;
     /** 本次加载是否已失败（onPageFinished 也会在失败后回调，需区分真成功） */
     private boolean loadFailed = false;
+    /** 本地模式 401 后是否已自动换过 token（防死循环，真成功后复位） */
+    private boolean retriedAuth = false;
     /** 上次 onResume 时的运行模式，用于检测用户在设置页切换了模式 */
     private String lastMode = "";
 
@@ -266,10 +268,19 @@ public class MainActivity extends Activity {
                     try { Thread.sleep(800); } catch (InterruptedException e) { return; }
                 }
                 final boolean ok = payloadOk && DshServerService.waitForPort(3080, 120000);
+                // 0.2.0 起 dsh web 有启动 token：从服务日志取带 token 的 URL
+                final String launchUrl = ok ? readLaunchUrl(30000) : null;
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         if (ok) {
-                            reload();
+                            if (launchUrl != null) {
+                                lastLoadedUrl = launchUrl;
+                                errorView.setVisibility(View.GONE);
+                                web.loadUrl(launchUrl);
+                            } else {
+                                // 没取到 token 也先试直连：401 会触发自动换 token
+                                reload();
+                            }
                         } else {
                             errorText.setText(getString(R.string.error_local));
                             errorView.setVisibility(View.VISIBLE);
@@ -306,6 +317,35 @@ public class MainActivity extends Activity {
         if (url.isEmpty()) url = DEFAULT_URL;
         if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://" + url;
         return url;
+    }
+
+    /** 0.2.0 起 dsh web 需要启动 token：扫描服务日志里的 "dsh web: <url>" 行，
+     *  取最后一条（node 重启后日志截断重写，token 随进程更新） */
+    private String readLaunchUrl(long timeoutMs) {
+        java.io.File log = new java.io.File(getFilesDir(), "dsh-server.log");
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                if (log.exists()) {
+                    java.io.BufferedReader r =
+                            new java.io.BufferedReader(new java.io.FileReader(log));
+                    String line, found = null;
+                    while ((line = r.readLine()) != null) {
+                        if (line.startsWith("dsh web: http")) {
+                            String u = line.substring(9).trim();
+                            int sp = u.indexOf(' '); // 去掉可能跟着的 LAN 部分
+                            if (sp > 0) u = u.substring(0, sp);
+                            found = u;
+                        }
+                    }
+                    r.close();
+                    if (found != null) return found;
+                }
+            } catch (java.io.IOException ignored) {
+            }
+            try { Thread.sleep(500); } catch (InterruptedException e) { return null; }
+        }
+        return null;
     }
 
     private boolean desktopMode() {
@@ -369,6 +409,7 @@ public class MainActivity extends Activity {
                         if (v != null && v.startsWith("\"chrome-error")) return;
                         if (loadFailed) return;
                         errorCount = 0;
+                        retriedAuth = false;
                         cancelAutoRetry();
                         String tweaks = FAB_JS
                                 + (desktopMode() ? TWEAKS_DESKTOP : (PATCH_JS + TWEAKS_MOBILE));
@@ -387,6 +428,26 @@ public class MainActivity extends Activity {
             public void onReceivedHttpError(WebView view, WebResourceRequest request,
                                             android.webkit.WebResourceResponse response) {
                 if (request.isForMainFrame() && response != null && response.getStatusCode() >= 400) {
+                    // 0.2.0 起本地服务带启动 token：cookie 过期/丢失时用日志里的
+                    // 最新 token URL 重换一次凭证，只自动重试一次防死循环
+                    if (localMode() && response.getStatusCode() == 401 && !retriedAuth) {
+                        loadFailed = true; // 401 错误页的 onPageFinished 不算成功
+                        retriedAuth = true;
+                        new Thread(new Runnable() {
+                            @Override public void run() {
+                                final String u = readLaunchUrl(15000);
+                                if (u != null) {
+                                    runOnUiThread(new Runnable() {
+                                        @Override public void run() {
+                                            lastLoadedUrl = u;
+                                            web.loadUrl(u);
+                                        }
+                                    });
+                                }
+                            }
+                        }).start();
+                        return;
+                    }
                     loadFailed = true;
                     showError(getString(R.string.err_http, response.getStatusCode()));
                 }

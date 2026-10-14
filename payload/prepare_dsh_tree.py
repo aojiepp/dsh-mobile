@@ -25,6 +25,10 @@ REMOVE_PACKAGES = [
     "koffi", "sharp", "node-pty",
     "@koromix", "@img",
     "@deepseek-ai/dsh-sandbox-windows-acl",
+    # 0.2.0 新增的原生/桌面平台产物：
+    "sherpa-onnx-win-x64",                  # 语音输入原生运行时（实验功能）
+    "node-addon-require-builtin-win32-x64-msvc",
+    "@deepseek-ai/libreoffice-kit-win32-x64",  # 182MB LibreOffice 运行时
 ]
 
 STUBS = {
@@ -136,9 +140,14 @@ def main():
         scopedir = os.path.join(nm, scope)
         if os.path.isdir(scopedir):
             for d in os.listdir(scopedir):
-                if d.startswith("node-addon-landlock-run-") or (
-                        d.startswith("node-addon-require-builtin-")
-                        and d != "node-addon-require-builtin"):
+                is_platform_pkg = (
+                    d.startswith("node-addon-landlock-run-")
+                    or d.startswith("node-addon-system-")
+                    or (d.startswith("node-addon-require-builtin-")
+                        and d != "node-addon-require-builtin")
+                    or (d.startswith("libreoffice-kit-") and d != "libreoffice-kit")
+                )
+                if is_platform_pkg:
                     shutil.rmtree(os.path.join(scopedir, d), ignore_errors=True)
                     print("removed platform pkg:", d)
 

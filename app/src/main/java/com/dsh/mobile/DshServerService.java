@@ -48,7 +48,17 @@ public class DshServerService extends Service {
     private static final int NOTIF_ID = 1;
     private static final String CHANNEL_ID = "dsh_server";
     private static final String PAYLOAD_ZIP = "payload.zip";
-    private static final String PAYLOAD_MARKER = "payload.v1.ok";
+    /** payload 完成标记按 versionCode 区分：升级安装（DSH 内核换代）后旧标记失配，
+     *  自动触发清理旧树 + 重新解压，避免新 APK 沿用旧内核。 */
+    private static String payloadMarkerName(Context ctx) {
+        try {
+            int vc = ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), 0).versionCode;
+            return "payload.app" + vc + ".ok";
+        } catch (Exception e) {
+            return "payload.app0.ok";
+        }
+    }
     private static final int MAX_RESTARTS = 5;
     private static final long RESTART_DELAY_MS = 3000;
 
@@ -70,7 +80,7 @@ public class DshServerService extends Service {
     public static File dshHomeDir(Context ctx) { return new File(ctx.getFilesDir(), "dsh-home"); }
 
     public static boolean isPayloadReady(Context ctx) {
-        return new File(payloadDir(ctx), PAYLOAD_MARKER).exists();
+        return new File(payloadDir(ctx), payloadMarkerName(ctx)).exists();
     }
 
     public static String serverState(Context ctx) {
@@ -168,7 +178,10 @@ public class DshServerService extends Service {
                         "--expose-internals",
                         "lib/bin.js", "web",
                         "--host", "127.0.0.1",
-                        "--port", "3080");
+                        "--port", "3080",
+                        // Android 上没有可打开的浏览器，跳过 browser handoff
+                        // （带 token 的 URL 仍打印到 stdout，由 MainActivity 取用）
+                        "--no-open");
                 pb.directory(appDir);
                 pb.environment().put("LD_LIBRARY_PATH",
                         new File(payloadDir(this), "termux/usr/lib").getAbsolutePath());
@@ -252,6 +265,10 @@ public class DshServerService extends Service {
             if (isPayloadReady(this)) return true;
             Log.i(TAG, "extract: begin");
             File root = payloadDir(this);
+            // 升级/上次解压失败：标记缺失即视为不可信，整树清掉重解
+            if (root.exists() && !deleteRecursively(root)) {
+                Log.w(TAG, "extract: stale payload cleanup incomplete");
+            }
             if (!root.exists() && !root.mkdirs()) {
                 putState(this, KEY_PAYLOAD_STATE, STATE_FAILED);
                 return false;
@@ -322,8 +339,8 @@ public class DshServerService extends Service {
                         Log.w(TAG, "setExecutable returned false: " + bin);
                     }
                 }
-                // 4. 完成标记
-                File marker = new File(root, PAYLOAD_MARKER);
+                // 4. 完成标记（按 versionCode 命名）
+                File marker = new File(root, payloadMarkerName(this));
                 try (FileOutputStream fos = new FileOutputStream(marker)) {
                     fos.write("ok".getBytes("UTF-8"));
                 }
@@ -363,6 +380,17 @@ public class DshServerService extends Service {
 
     private static void sleepQuietly(long ms) {
         try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
+    }
+
+    private static boolean deleteRecursively(File f) {
+        boolean ok = true;
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) {
+                for (File k : kids) ok &= deleteRecursively(k);
+            }
+        }
+        return f.delete() && ok;
     }
 
     private void createChannel() {
