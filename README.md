@@ -79,6 +79,20 @@ python tools\build_manual.py
 
 构建脚本首次运行会自动生成 `tools\debug.keystore`（已 gitignore，请勿提交）。
 
+## 发布（推送到 GitHub）
+
+`ghproxy.net` 只是**只读镜像**：用它 push 会回 `Invalid username or token`（代理把请求转给 GitHub，但凭证对不上）。推送必须直连 github.com：
+
+```powershell
+# 1) 确保能直连 GitHub（本机需要先起代理，例如 Clash Verge 的 TUN/系统代理）
+# 2) 用带 :443 的 URL 推送，绕开全局 .gitconfig 里的 ghproxy insteadOf 改写
+git push https://github.com:443/aojiepp/dsh-mobile.git main:main
+```
+
+- `https://github.com:443/...` 不会命中 `url.https://ghproxy.net/https://github.com/.insteadOf`（改写只匹配 `https://github.com/` 前缀），同时 GCM 仍按 host `github.com` 找到已存 token。
+- 推送前可先用 `curl https://api.github.com/repos/aojiepp/dsh-mobile` 确认直连可用。
+- 推完把代理**正常退出**（托盘 → 退出），别强杀，否则内核/TUN/系统代理会残留。
+
 ## 安装与使用
 
 ```powershell
