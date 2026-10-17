@@ -32,6 +32,10 @@ dsh-mobile/
 │   ├── java/com/dsh/mobile/      # MainActivity / DshServerService / SettingsActivity / ArtifactsActivity(收纳箱)
 │   ├── assets/payload.zip        # 构建产物（不入库，由 payload 管线生成）
 │   └── res/                      # 布局、主题（含夜间模式）
+├── design/
+│   ├── ic_launcher.svg           # 应用图标真源（蓝色大肥鱼 / 鲸鱼娘，简笔扁平）
+│   ├── svg2vector.py             # SVG → VectorDrawable（生成 res/drawable/ic_launcher_fg.xml）
+│   └── vector2svg.py             # 反渲染自检（改过转换器后跑，确认颜色/坐标）
 ├── payload/
 │   ├── prepare_dsh_tree.py       # 步骤2：裁剪 DSH 依赖树（删原生模块/打 stub/剥离）
 │   ├── patch_android_fs.py       # Android 补丁（link()→rename()、flock 放宽、require-builtin 回退）
