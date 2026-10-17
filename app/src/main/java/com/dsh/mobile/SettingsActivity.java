@@ -95,6 +95,10 @@ public class SettingsActivity extends Activity {
             @Override public void onClick(View v) { confirmReextract(); }
         });
 
+        findViewById(R.id.btn_view_log).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { showServerLog(); }
+        });
+
         btnTest.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { testConnection(); }
         });
@@ -183,7 +187,12 @@ public class SettingsActivity extends Activity {
         } else if (st.equals(DshServerService.STATE_RUNNING)) {
             statusText.setText(R.string.status_running);
         } else if (st.startsWith(DshServerService.STATE_EXITED)) {
-            statusText.setText(getString(R.string.status_exited) + " (" + st + ")");
+            // 陈旧状态（上一轮退出）不再吓人：端口在监听就按运行中处理
+            if (DshServerService.isPortOpen(3080, 300)) {
+                statusText.setText(R.string.status_running);
+            } else {
+                statusText.setText(getString(R.string.status_exited) + " (" + st + ")");
+            }
         } else if (st.equals("stopped")) {
             statusText.setText(R.string.status_stopped);
         } else if (st.startsWith(DshServerService.STATE_FAILED)) {
@@ -197,6 +206,41 @@ public class SettingsActivity extends Activity {
     }
 
     /** 二次确认后清运行时重解压（会话/凭据在 dsh-home，不动） */
+    /** 查看内置服务的运行日志（node 的 stdout/stderr，v2.9.1 起可直接在手机上排障） */
+    private void showServerLog() {
+        String text;
+        File log = new File(getFilesDir(), "dsh-server.log");
+        try {
+            if (!log.exists() || log.length() == 0) {
+                text = getString(R.string.log_empty);
+            } else {
+                long len = log.length();
+                long start = Math.max(0, len - 12288);
+                byte[] buf = new byte[(int) (len - start)];
+                try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(log, "r")) {
+                    raf.seek(start);
+                    raf.readFully(buf);
+                }
+                text = new String(buf, StandardCharsets.UTF_8);
+                if (start > 0) text = "…\n" + text;
+            }
+        } catch (Exception e) {
+            text = "读取日志失败：" + e.getMessage();
+        }
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(11);
+        tv.setTextIsSelectable(true);
+        tv.setPadding(32, 24, 32, 24);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.dialog_log)
+                .setView(sv)
+                .setPositiveButton(R.string.dlg_cancel, null)
+                .show();
+    }
+
     private void confirmReextract() {
         if (!localChecked()) return;
         new android.app.AlertDialog.Builder(this)

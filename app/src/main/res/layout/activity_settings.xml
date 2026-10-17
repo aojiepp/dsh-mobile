@@ -148,6 +148,14 @@
                 android:text="@string/btn_reextract"
                 style="@style/DshButtonSecondary" />
 
+            <Button
+                android:id="@+id/btn_view_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/btn_view_log"
+                style="@style/DshButtonSecondary" />
+
             <TextView
                 android:id="@+id/pc_status"
                 android:layout_width="match_parent"

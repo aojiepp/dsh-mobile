@@ -24,7 +24,12 @@ DEFAULT_CHECKOUT = os.path.join(
 REMOVE_PACKAGES = [
     "koffi", "sharp", "node-pty",
     "@koromix", "@img",
-    "@deepseek-ai/dsh-sandbox-windows-acl",
+    # 注意：@deepseek-ai/dsh-sandbox-windows-acl **不能移除也不能打 stub**。
+    # 0.2.0-rc.2 的 dsh-sandbox-local 会 `import { registerAclDiagnosisSkill,
+    # ACL_DIAGNOSIS_SKILL, AclSandbox, ... }` 它，stub 少了命名导出会让
+    # sandbox 插件 import 失败 → tool-bash 一直 waiting for shell →
+    # agent preset 无效（真机报「新建会话失败」）。它是纯 JS 包（~220KB），
+    # koffi 走 createLazyRequire 且只在 win32 路径用到，Android 上安全。
     # 0.2.0 新增的原生/桌面平台产物：
     "sherpa-onnx-win-x64",                  # 语音输入原生运行时（实验功能）
     "node-addon-require-builtin-win32-x64-msvc",
@@ -57,19 +62,6 @@ STUBS = {
             "export function spawn() { throw new Error('node-pty: terminal sessions are unavailable on this platform'); }\n"
             "const nodePty = { spawn };\n"
             "export default nodePty;\n"
-        ),
-    },
-    "@deepseek-ai/dsh-sandbox-windows-acl": {
-        "package.json": '{"name":"@deepseek-ai/dsh-sandbox-windows-acl","version":"1.0.0-stub","type":"module",'
-                        '"main":"index.js","exports":{".":"./index.js","./runner":"./index.js",'
-                        '"./package.json":"./package.json"}}',
-        "index.js": (
-            "export class AclWriteGrant {\n"
-            "  static create() { throw new Error('windows-acl sandbox is unavailable on this platform'); }\n"
-            "}\n"
-            "export function assertTempRootOutsideWorkspace() {}\n"
-            "export function tempWriteSid() { return ''; }\n"
-            "export function workspaceWriteSid() { return ''; }\n"
         ),
     },
 }

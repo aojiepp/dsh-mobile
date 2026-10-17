@@ -117,4 +117,7 @@
     <string name="reextract_confirm">会删除现有运行时并重新解压（约 1-3 分钟）。会话记录与 API Key 不受影响。继续？</string>
     <string name="btn_restart_disabled">解压中，暂不能重启</string>
     <string name="status_extract_stalled">进度已超过 25 秒没变化，可试「重新解压运行环境」。</string>
+    <string name="btn_view_log">查看服务日志</string>
+    <string name="dialog_log">内置服务日志</string>
+    <string name="log_empty">（日志为空：服务还没输出过内容）</string>
 </resources>

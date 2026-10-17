@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
     public static final String MODE_LOCAL = "local";
     public static final String MODE_PC = "pc";
     public static final String DEFAULT_URL = "http://127.0.0.1:3080";
-    public static final String VERSION = "2.9";
+    public static final String VERSION = "2.9.2";
 
     private WebView web;
     private ProgressBar progress;
@@ -443,13 +443,16 @@ public class MainActivity extends Activity {
             @Override public void run() {
                 boolean ok = false;
                 String srv = "";
-                long deadline = System.currentTimeMillis() + 90000;
+                final long waitStart = System.currentTimeMillis();
+                long deadline = waitStart + 90000;
                 while (System.currentTimeMillis() < deadline) {
                     if (DshServerService.isPortOpen(3080, 400)) { ok = true; break; }
                     srv = DshServerService.serverState(MainActivity.this);
-                    // 服务已明确失败 / 已退出：不必干等满 150 秒
-                    if (srv.startsWith(DshServerService.STATE_FAILED)
-                            || srv.startsWith(DshServerService.STATE_EXITED)) {
+                    // 只信「本次等待开始之后」写入的失败/退出：上一轮留下的 exited:13
+                    // 会让新一次启动被瞬间误判（v2.9.1 真机实测踩过）
+                    long ts = DshServerService.serverStateUpdatedAt(MainActivity.this);
+                    if (ts >= waitStart && (srv.startsWith(DshServerService.STATE_FAILED)
+                            || srv.startsWith(DshServerService.STATE_EXITED))) {
                         break;
                     }
                     try { Thread.sleep(500); } catch (InterruptedException e) {

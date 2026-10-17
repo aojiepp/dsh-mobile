@@ -57,6 +57,8 @@ public class DshServerService extends Service {
     public static final String KEY_PAYLOAD_TS = "payload_ts";
     /** 解压失败原因（失败时写，成功时清空） */
     public static final String KEY_EXTRACT_ERROR = "extract_error";
+    /** server_state 最近更新时间戳（毫秒）：UI 用它区分「陈旧历史状态」与本次启动 */
+    public static final String KEY_SERVER_TS = "server_ts";
 
     private static final String TAG = "DshServer";
     private static final int NOTIF_ID = 1;
@@ -135,6 +137,21 @@ public class DshServerService extends Service {
                 .getString(KEY_EXTRACT_ERROR, "");
     }
 
+    /** server_state 的更新时间；0 表示从未写过 */
+    public static long serverStateUpdatedAt(Context ctx) {
+        String v = ctx.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_SERVER_TS, "");
+        try { return Long.parseLong(v); } catch (Exception e) { return 0; }
+    }
+
+    /** 写服务状态 + 时间戳（v2.9.1：UI 靠时间戳忽略上一轮留下的 exited:13 之类陈旧状态） */
+    private static void setServerState(Context ctx, String state) {
+        ctx.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+                .edit().putString(KEY_SERVER_STATE, state)
+                .putString(KEY_SERVER_TS, String.valueOf(System.currentTimeMillis()))
+                .apply();
+    }
+
     /** 解析 "extracting:37" 里的百分比，拿不到返回 -1 */
     public static int payloadPercent(Context ctx) {
         String s = payloadState(ctx);
@@ -178,7 +195,7 @@ public class DshServerService extends Service {
             putState(this, KEY_PAYLOAD_STATE, "");
             putState(this, KEY_PAYLOAD_DETAIL, "");
             putState(this, KEY_EXTRACT_ERROR, "");
-            putState(this, KEY_SERVER_STATE, STATE_STARTING);
+            setServerState(this, STATE_STARTING);
             stopping = false;
             final int gen = ++bootGen;
             worker = new Thread(new Runnable() {
@@ -204,7 +221,7 @@ public class DshServerService extends Service {
             return START_STICKY;
         }
         if (nodeProcess != null && isAlive()) {
-            putState(this, KEY_SERVER_STATE, STATE_RUNNING);
+            setServerState(this, STATE_RUNNING);
             return START_STICKY;
         }
         if (worker == null || !worker.isAlive()) {
@@ -241,17 +258,22 @@ public class DshServerService extends Service {
 
         if (!isPayloadReady(this)) {
             if (!extractPayload()) {
-                putState(this, KEY_SERVER_STATE, STATE_FAILED);
+                setServerState(this, STATE_FAILED);
                 updateNotificationRunningFailed();
                 return;
             }
         }
 
-        putState(this, KEY_SERVER_STATE, STATE_STARTING);
+        setServerState(this, STATE_STARTING);
         notifyServerState(getString(R.string.notif_text_starting));
         int restarts = 0;
         while (!stopping && gen == bootGen) {
             try {
+                // Termux 版 node 的 OpenSSL 把配置路径编成了
+                // /data/data/com.termux/files/usr/etc/tls/openssl.cnf，
+                // 在本机不存在 → 初始化 crypto 时直接以退出码 13 死掉（v2.9.1 修复）。
+                // 这里补一份最小配置并用 OPENSSL_CONF 指过去。
+                File opensslConf = ensureOpensslConf();
                 ProcessBuilder pb = new ProcessBuilder(
                         nodeBin.getAbsolutePath(),
                         "--expose-internals",
@@ -272,6 +294,9 @@ public class DshServerService extends Service {
                         new File(payloadDir(this), "termux/usr/etc/tls/cert.pem").getAbsolutePath());
                 pb.environment().put("SSL_CERT_DIR",
                         new File(payloadDir(this), "termux/usr/etc/tls").getAbsolutePath());
+                if (opensslConf != null) {
+                    pb.environment().put("OPENSSL_CONF", opensslConf.getAbsolutePath());
+                }
                 pb.environment().put("PATH",
                         new File(payloadDir(this), "termux/usr/bin").getAbsolutePath()
                                 + ":/system/bin:/system/xbin");
@@ -282,13 +307,26 @@ public class DshServerService extends Service {
                 pb.redirectOutput(new File(getFilesDir(), "dsh-server.log"));
                 nodeProcess = pb.start();
                 Log.i(TAG, "node spawned, waiting for exit");
-                putState(this, KEY_SERVER_STATE, STATE_STARTING);
+                setServerState(this, STATE_STARTING);
+                // 端口真起来了再置 RUNNING（v2.9.1：以前状态永远停在 starting）；
+                // 期间 node 若自己挂了就立刻退出等待，不影响下面的退出处理
+                long readyDeadline = System.currentTimeMillis() + 90000;
+                while (!stopping && gen == bootGen
+                        && System.currentTimeMillis() < readyDeadline) {
+                    if (isPortOpen(3080, 300)) {
+                        setServerState(this, STATE_RUNNING);
+                        Log.i(TAG, "dsh web port 3080 is up");
+                        break;
+                    }
+                    if (!isAlive()) break; // node 已退出，交给下面的 waitFor 统一处理
+                    sleepQuietly(300);
+                }
                 int code = nodeProcess.waitFor();
                 nodeProcess = null;
                 if (stopping || gen != bootGen) return;
                 restarts++;
                 Log.w(TAG, "dsh server exited code=" + code + " restart=" + restarts);
-                putState(this, KEY_SERVER_STATE, STATE_EXITED + ":" + code);
+                setServerState(this, STATE_EXITED + ":" + code);
                 if (restarts >= MAX_RESTARTS) {
                     Log.e(TAG, "too many restarts, giving up");
                     updateNotificationRunningFailed();
@@ -296,7 +334,7 @@ public class DshServerService extends Service {
                 }
             } catch (IOException e) {
                 Log.e(TAG, "spawn failed", e);
-                putState(this, KEY_SERVER_STATE, STATE_FAILED + ":" + e.getMessage());
+                setServerState(this, STATE_FAILED + ":" + e.getMessage());
                 restarts++;
                 if (restarts >= MAX_RESTARTS) {
                     updateNotificationRunningFailed();
@@ -325,7 +363,7 @@ public class DshServerService extends Service {
             } catch (Exception e) { Log.w(TAG, "stop node failed", e); }
         }
         nodeProcess = null;
-        putState(this, KEY_SERVER_STATE, "stopped");
+        setServerState(this, "stopped");
     }
 
     private boolean isAlive() {
@@ -569,6 +607,33 @@ public class DshServerService extends Service {
     }
 
     // ---------- 工具 ----------
+
+    /** 补一份最简 openssl.cnf 并用 OPENSSL_CONF 指过去。
+     *  Termux 版 node 把 OpenSSL 配置目录编死成 /data/data/com.termux/files/usr/etc/tls，
+     *  在本应用里不存在 → node 初始化 crypto 时直接退出（实测退出码 13）。 */
+    private File ensureOpensslConf() {
+        try {
+            File dir = new File(payloadDir(this), "termux/usr/etc/tls");
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File conf = new File(dir, "openssl.cnf");
+            if (!conf.exists() || conf.length() == 0) {
+                try (FileOutputStream fos = new FileOutputStream(conf)) {
+                    // 只有注释 = 不覆盖任何默认值，OpenSSL 3 会自动加载 default provider
+                    fos.write(("# DSH Mobile: minimal OpenSSL config\r\n"
+                            + "# Termux node bakes its OpenSSL config path to\r\n"
+                            + "# /data/data/com.termux/files/usr/etc/tls/openssl.cnf,\r\n"
+                            + "# which does not exist inside this app. Pointing OPENSSL_CONF here\r\n"
+                            + "# keeps OpenSSL on its built-in defaults.\r\n").getBytes("UTF-8"));
+                }
+                conf.setReadable(true, true);
+            }
+            if (!conf.canRead()) return null;
+            return conf;
+        } catch (Exception e) {
+            Log.w(TAG, "write openssl.cnf failed", e);
+            return null;
+        }
+    }
 
     /** 轮询等待端口可用。 */
     public static boolean waitForPort(int port, long timeoutMs) {
