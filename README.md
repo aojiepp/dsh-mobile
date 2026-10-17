@@ -4,7 +4,7 @@
 
 > **设计原则：尽量保持 DSH 原版风格。** 手机上跑的就是原样的 DSH 前端与后端，本项目**不重写界面、不做「精简版 / 移动特供版」**：只在 WebView 层注入一层窄屏补丁修布局冲突（输入栏被顶出屏幕、侧边栏 / 详情抽屉出界等），其余一律跟随 DSH 自身；原生壳只负责系统级能力（前台服务保活、payload 解压、通知、收纳箱）。DSH 内核升级，界面就跟着一起升级，不维护 UI 分叉。
 
-> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；v2.4 起 **bash / write / glob / grep 工具全部可用**（内置 GNU bash 5.3 + ripgrep 15.2，并修复了 Android 上 `link()` 被 SELinux 禁止导致的写文件失败）；v2.5 起内置**收纳箱**（设置页 → 收纳箱：按「工作台产物 / 会话记录」分类浏览，可提取到手机 Download 或删除）；v2.6 起原生界面**统一为 DeepSeek 灰色单风格**（灰底白卡 + DeepSeek 蓝 `#4D6BFE`，深浅合一只保留一套，夜间模式不再切换）；v2.7 起「连接电脑」模式**修复**：一键连接检测、针对性错误提示、断连自动重连（3s 起指数退避，上限 30s）+ 随仓库提供 `tools\pc_bridge.bat` 隧道自动维持工具；v2.8 起内嵌内核升级为 **DSH 0.2.0-rc.2**（适配 0.2.0 的 web 启动 token 鉴权与新的原生依赖，升级安装后自动重解压 payload）；v2.9 起**首启解压有真实进度条**（拷贝 / 解压 N/M 文件 / 校验三段，百分比按 zip 中央目录的真实解压尺寸算），解压前做**存储空间预检**、完成后做**完整性校验**，失败把原因直接显示并提供「重新解压」；解压期间**禁止重启内置服务**（避免两条命令打架），并加了**空白页兜底**。v2.9.1–v2.9.3 在真机（vivo / Android 16 / arm64）上修通了内置服务启动（OpenSSL 配置路径、sandbox 插件缺失导出两个坑，详见 `AGENTS.md`），并把图标换成蓝色大肥鱼的简笔 SVG。界面细节继续迭代中，欢迎 issue / PR。
+> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；v2.4 起 **bash / write / glob / grep 工具全部可用**（内置 GNU bash 5.3 + ripgrep 15.2，并修复了 Android 上 `link()` 被 SELinux 禁止导致的写文件失败）；v2.5 起内置**收纳箱**（设置页 → 收纳箱：按「工作台产物 / 会话记录」分类浏览，可提取到手机 Download 或删除）；v2.6 起原生界面**统一为 DeepSeek 灰色单风格**（灰底白卡 + DeepSeek 蓝 `#4D6BFE`，深浅合一只保留一套，夜间模式不再切换）；v2.7 起「连接电脑」模式**修复**：一键连接检测、针对性错误提示、断连自动重连（3s 起指数退避，上限 30s）+ 随仓库提供 `tools\pc_bridge.bat` 隧道自动维持工具；v2.8 起内嵌内核升级为 **DSH 0.2.0-rc.2**（适配 0.2.0 的 web 启动 token 鉴权与新的原生依赖，升级安装后自动重解压 payload）；v2.9 起**首启解压有真实进度条**（拷贝 / 解压 N/M 文件 / 校验三段，百分比按 zip 中央目录的真实解压尺寸算），解压前做**存储空间预检**、完成后做**完整性校验**，失败把原因直接显示并提供「重新解压」；解压期间**禁止重启内置服务**（避免两条命令打架），并加了**空白页兜底**。v2.9.1–v2.9.3 在真机（vivo / Android 16 / arm64）上修通了内置服务启动（OpenSSL 配置路径、sandbox 插件缺失导出两个坑，详见 `AGENTS.md`），并把图标换成蓝色大肥鱼的简笔 SVG。**v2.10 起内嵌内核跟随桌面版升级到 DSH 0.2.1-rc.2**：payload 管线新增依赖去重步骤（npm 在 50 个包里各塞了一份 `zod@4.4.3`，去重省下约 140MB 解压体积）、裁掉 0.2.1 新引入的 win32 版 `tsx/esbuild` 工具链，已在真机验证「升级安装 → 自动重解压 → 服务启动 → 新建会话 → 正常对话」。界面细节继续迭代中，欢迎 issue / PR。
 
 ## 工作原理
 
@@ -40,6 +40,8 @@ dsh-mobile/
 │   └── vector2svg.py             # 反渲染自检（改过转换器后跑，确认颜色/坐标）
 ├── payload/
 │   ├── prepare_dsh_tree.py       # 步骤2：裁剪 DSH 依赖树（删原生模块/打 stub/剥离）
+│   ├── dedupe_node_modules.py    # 步骤2.5：去重 npm 嵌套大副本（zod 等，0.2.1 起）
+│   ├── verify_zod_resolution.py  # 去重前后每个 importer 解析版本一致性校验
 │   ├── patch_android_fs.py       # Android 补丁（link()→rename()、flock 放宽、require-builtin 回退）
 │   ├── payload_tools.py          # .deb 解包 + ELF DT_NEEDED 解析
 │   ├── extract_termux.py         # 步骤1：解包 node .deb 与依赖 .so 到 termux 前缀
@@ -63,25 +65,33 @@ dsh-mobile/
 python payload\extract_termux.py extract
 #    .deb 下载地址见 extract_termux.py 顶部注释；也可手动放入 payload\debs\
 
-# 2. 拉取 DSH 依赖树并舞台拼装（在仓库外的空目录，例如 ..\dshm-fetch）
-mkdir ..\dshm-fetch; cd ..\dshm-fetch
-npm install --omit=dev --registry=https://registry.npmmirror.com @deepseek-ai/dsh@0.2.0-rc.2
-#    国内直连 npmjs 极慢，务必用镜像；不要加 --install-strategy=nested（树会翻倍）
-robocopy node_modules\@deepseek-ai\dsh %TEMP%\dshm-stage\dsh /E
-robocopy node_modules %TEMP%\dshm-stage\dsh\node_modules /E /XD node_modules\@deepseek-ai\dsh
-cd ..\dsh-mobile
+# 2. 拉取 DSH 依赖树并按「包本体 + 内嵌 node_modules」摆好舞台
+#    注意是 tarball 里直接 npm install（全量，含 devDependencies）：桌面版 host 侧插件
+#    （host-webserver / llm-deepseek / sandbox-local 等）都挂在 dsh 包的 devDependencies 里，
+#    --omit=dev 会漏装，web profile 起不来。
+mkdir %TEMP%\dshm-stage; cd %TEMP%\dshm-stage
+npm pack @deepseek-ai/dsh@0.2.1-rc.2
+tar -xzf deepseek-ai-dsh-0.2.1-rc.2.tgz
+move package dsh
+cd dsh; npm install --no-audit --no-fund
+cd <本仓库>\dsh-mobile
 
-# 3. 裁剪依赖树（删桌面原生包/打 stub/剥离/打 Android 补丁，约 112MB）
+# 3. 裁剪依赖树（删桌面原生包/打 stub/剥离/打 Android 补丁）
 python payload\prepare_dsh_tree.py %TEMP%\dshm-stage\dsh
 
-# 4. 打包 payload.zip 并放入 assets
+# 4. 去重嵌套大副本（0.2.1 起 npm 在 50 个包下各塞一份 zod@4.4.3，约 140MB）
+python payload\dedupe_node_modules.py %TEMP%\dshm-trim\app
+
+# 5. 打包 payload.zip 并放入 assets（约 87MB zip / 269MB 解压后）
 python payload\build_payload.py
 copy payload\payload.zip app\src\main\assets\payload.zip
 
-# 5. 构建 APK（构建目录必须是 ASCII 路径，中文路径会弄坏 aapt2）
+# 6. 构建 APK（构建目录必须是 ASCII 路径，中文路径会弄坏 aapt2）
 python tools\build_manual.py
-# 产物: build\apk\dsh-mobile-v2.9-debug.apk
+# 产物: build\apk\dsh-mobile-v2.10-debug.apk
 ```
+
+换内核时**必须 bump `tools\build_manual.py` 里的 `VERSION_CODE`**（payload 完成标记按 versionCode 命名，不 bump 手机不会重解压）。
 
 构建脚本首次运行会自动生成 `tools\debug.keystore`（已 gitignore，请勿提交）。
 
@@ -102,12 +112,12 @@ git push https://github.com:443/aojiepp/dsh-mobile.git main:main
 ## 安装与使用
 
 ```powershell
-adb install -r build\apk\dsh-mobile-v2.9-debug.apk
+adb install -r build\apk\dsh-mobile-v2.10-debug.apk
 ```
 
 - 真机（vivo/国产 ROM）安装会弹确认框，`tools\install_apk.ps1` 会通过 uiautomator 自动点击「已了解风险」+「继续安装」。
-- 首次启动解压 payload 约 1-3 分钟，之后秒开。**升级安装**（如 v2.8 → v2.9）会自动检测版本并重新解压 payload，同样约 1-3 分钟。**v2.9 起解压过程有进度条**（标题/通知栏都会显示百分比与当前文件数），失败会直接给出原因（如「存储空间不足：需要约 290MB，当前可用 60MB」）并提供「重新解压」按钮。
-- **空间要求**：解压后运行时约 220MB；首次解压期间还要放一份临时 zip（约 70MB），建议手机预留 **300MB 以上**空闲空间。
+- 首次启动解压 payload 约 1-3 分钟，之后秒开。**升级安装**（如 v2.9 → v2.10）会自动检测版本并重新解压 payload，同样约 1-3 分钟。**v2.9 起解压过程有进度条**（标题/通知栏都会显示百分比与当前文件数），失败会直接给出原因（如「存储空间不足：需要约 290MB，当前可用 60MB」）并提供「重新解压」按钮。
+- **空间要求**：解压后运行时约 270MB；首次解压期间还要放一份临时 zip（约 87MB），建议手机预留 **450MB 以上**空闲空间。
 - **API Key**：App 设置页填写（写入 `$DSH_HOME/.env`，权限 600），或启动后在 DSH 界面「设置 → 模型」里存储（写入 `$DSH_HOME/.credentials.yaml`）。
 - **收纳箱**：设置页 → 收纳箱 —— 智能体产物按「工作台产物 / 会话记录」分类列出，可「提取」到手机 `Download/dsh-export/`（文件管理器可见）或直接「删除」；应用私有目录普通文件管理器看不到，这里是唯一入口。
 - 通知权限用于前台服务保活；进程随应用关闭而退出。
@@ -147,7 +157,7 @@ dsh web --host <电脑局域网IP> --trusted-host <电脑局域网IP>:3080
 | bash / glob / grep | v2.4 已内置 GNU bash 5.3 与 ripgrep 15.2（Termux aarch64），并注入了 `@vscode/ripgrep-android-arm64` 平台包（Android 的 node 报告 `process.platform === "android"`，非 linux）；四工具真机 PASS |
 | 首启解压 | v2.9 起有真实进度（拷贝/解压/校验三段）、空间预检、完整性校验与失败原因；解压中「重启内置服务」会被服务端忽略（UI 同时置灰），避免解压线程与重启打架 |
 | 交互式终端 / 图像附件 / 沙箱隔离 | 仍无对应原生原语（node-pty/sharp/landlock 无 arm64 产物），已打 stub，调用时干净报错而非崩溃；bash 工具不受影响 |
-| 体积 | APK 约 74MB，解压后运行时约 220MB（首解压需额外 ~290MB 空间） |
+| 体积 | APK 约 83MB，解压后运行时约 270MB（首解压期间额外一份 ~87MB 的 zip，建议预留 450MB+） |
 | 服务生命周期 | node 进程随 App 进程存活；被系统杀掉后重新打开 App 会自动拉起 |
 | 连接电脑 | 电脑端 DSH Web 默认仅监听 127.0.0.1（上游安全设计）；手机经 adb reverse 隧道接入，App 内置连接检测 + 断连自动重连，`tools\pc_bridge.bat` 维持隧道 |
 | UI | 移动端补丁层已修主要布局冲突（输入栏/侧边栏/详情抽屉/悬浮按钮）；原生界面（设置/收纳箱/菜单/启动页）统一 DeepSeek 灰色单风格，深浅模式同一套 |

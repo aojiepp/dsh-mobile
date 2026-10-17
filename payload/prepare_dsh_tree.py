@@ -34,6 +34,10 @@ REMOVE_PACKAGES = [
     "sherpa-onnx-win-x64",                  # 语音输入原生运行时（实验功能）
     "node-addon-require-builtin-win32-x64-msvc",
     "@deepseek-ai/libreoffice-kit-win32-x64",  # 182MB LibreOffice 运行时
+    # 0.2.1 新增：dsh-loader-smoke（仅开发期 smoke 测试）拉了 tsx → esbuild，
+    # 且装的是 win32-x64 的 esbuild.exe（11MB）。运行时没有任何包 import tsx，
+    # Android 上反而会因为平台二进制不存在而炸，直接删掉这条工具链。
+    "@esbuild", "esbuild", "tsx",
 ]
 
 STUBS = {

@@ -15,14 +15,21 @@ Android 上独立跑完整 DSH 的壳工程。构建链、payload 管线、真�
 ## 构建（零网络、全手工链）
 
 ```powershell
-python payload\prepare_dsh_tree.py <staging>\dsh   # 需要 dsh 包 + 同级 node_modules
+python payload\prepare_dsh_tree.py <staging>\dsh   # 需要 dsh 包 + 内嵌 node_modules
+python payload\dedupe_node_modules.py              # 0.2.1 起必跑：去重 zod 等多副本
 python payload\build_payload.py
 copy payload\payload.zip app\src\main\assets\payload.zip
 python tools\build_manual.py                        # 产物 build\apk\dsh-mobile-v<ver>-debug.apk
 ```
 
-- staging 目录要按「`dsh` 包本体 + `node_modules` 嵌在它下面」摆好（`npm install --omit=dev` 后
-  robocopy 拼），`prepare_dsh_tree.py` 不接受扁平 node_modules。
+- staging 目录要按「`dsh` 包本体 + `node_modules` 嵌在它下面」摆好。现在的做法：`npm pack @deepseek-ai/dsh@<ver>`
+  → 解开成 `dsh/` → 进目录 `npm install --no-audit --no-fund`。**必须全量装（含 devDependencies）**：
+  桌面版 host 侧插件（host-webserver / llm-deepseek / sandbox-local 等）挂在 dsh 包的 devDependencies 里，
+  `--omit=dev` 会漏装、web profile 起不来。
+- `dedupe_node_modules.py`：0.2.1 起 50 个 `@deepseek-ai` 包精确锁 `zod@4.4.3`，顶层被 hoist 成 4.6.7，
+  npm 于是给每个包塞一份嵌套副本（51×2.89MB）。脚本把一份 4.4.3 提升到顶层、删掉其余副本、再给
+  「本来解析到 4.6.7」的 7 个 importer 塞回 4.6.7，末尾用真实 import 扫描复核**每个 importer 解析版本不变**。
+  `payload/verify_zod_resolution.py` 可独立复核（`--save` 存快照对比）。
 - 改 payload 后**必须 bump `VERSION_CODE`**（完成标记按 versionCode 命名 `payload.app<vc>.ok`），
   否则手机上不会重解压；只改 Java/env 时可以不 bump。
 - `payload/payload.zip` 是中间产物，会被 `build_payload.py` 覆盖；assets 里那份才是随 APK 发布的。
@@ -40,6 +47,17 @@ python tools\build_manual.py                        # 产物 build\apk\dsh-mobil
 - 服务状态写 SharedPreferences 时要带时间戳：UI 得忽略上一轮留下的 `exited:13` 之类陈旧状态，
   否则新一次启动会被瞬间误判为失败。
 - 装 APK：vivo 安装器要点两下（风险勾选框 + 继续安装），见 `..\AGENTS.md`。
+
+## 换内核记录
+
+- **0.2.0-rc.2 → 0.2.1-rc.2（v2.10，2026-10-17 真机验证）**：
+  - 0.2.1 的 `dsh-loader-smoke`（devDependency）拉了 `tsx` → `esbuild`，npm 装的是 **win32-x64 版
+    esbuild.exe（11MB）**，Android 上没用还占体积；`prepare_dsh_tree.py` 的 `REMOVE_PACKAGES`
+    已加 `@esbuild / esbuild / tsx`（运行时没有任何包 import tsx）。
+  - 新增依赖里没有别的 arm64 不友好原生包；`dsh-win32-process`（import koffi）走 lazy require，安全。
+  - **旧 `files/dsh-home` 不用清**：0.2.0 生成的 `profiles/web` 配置在 0.2.1 下能直接 boot，
+    `dsh web` 正常打印 token URL，新建会话 + 一轮对话真机通过。
+  - payload 体积：裁剪后 268.7MB raw / 82.9MB zip（0.2.0 是 213MB / 71MB），APK 83MB。
 
 ## 关键路径（运行时）
 
