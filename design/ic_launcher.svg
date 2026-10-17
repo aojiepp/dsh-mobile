@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <!-- DSH Mobile 图标源：蓝色大肥鱼 / 鲸鱼娘（半睁困眼 · 白色荷叶边发带 · 蓝色蝴蝶结 · 鲸鱼鳍）
+       只画前景层；背景色由 adaptive-icon 的 ic_launcher_bg 提供。内容缩进 66/108dp 安全区。 -->
+  <g transform="translate(54,54) scale(0.86) translate(-54,-54)">
+
+    <!-- 鲸鱼胸鳍（在头发后面，向外上翘） -->
+    <g fill="#2E4A88">
+      <path d="M30,64 C22,58 12,54 11,60 C10,67 20,74 31,74 Z"/>
+      <path d="M78,64 C86,58 96,54 97,60 C98,67 88,74 77,74 Z"/>
+    </g>
+    <g stroke="#4C6BA8" stroke-width="1.6" stroke-linecap="round" fill="none">
+      <path d="M16,60 C20,64 24,67 28,69"/>
+      <path d="M92,60 C88,64 84,67 80,69"/>
+    </g>
+
+    <!-- 后方头发 -->
+    <path d="M54,21 C77,21 89,38 89,61 C89,77 84,89 76,91
+             C68,93 60,89 54,90 C48,89 40,93 32,91
+             C24,89 19,77 19,61 C19,38 31,21 54,21 Z" fill="#3A4C86"/>
+
+    <!-- 脸 -->
+    <ellipse cx="54" cy="66" rx="21.5" ry="20.5" fill="#FDEDE2"/>
+
+    <!-- 刘海：一整片圆润发片，盖住额头 -->
+    <path d="M30,52 C31,35 41,27 54,27 C67,27 77,35 78,52
+             C73,45 65,41 54,41 C43,41 35,45 30,52 Z" fill="#3A4C86"/>
+    <!-- 两侧一缕尖发，避免太像锅盖 -->
+    <path d="M63,42 C67,47 69,53 69,58 C67,53 64,48 60,45 Z" fill="#3A4C86"/>
+    <path d="M44,42 C41,47 39,52 39,57 C41,52 44,48 47,45 Z" fill="#3A4C86"/>
+    <path d="M56,27 C64,29 70,35 73,43 C68,36 63,31 55,29 Z" fill="#6C86C6" opacity="0.9"/>
+
+    <!-- 两侧鬓发 -->
+    <path d="M28,60 C25,72 26,85 31,90 C29,79 30,70 33,64 Z" fill="#3A4C86"/>
+    <path d="M80,60 C83,72 82,85 77,90 C79,79 78,70 75,64 Z" fill="#3A4C86"/>
+
+    <!-- 白色荷叶边发带（贴在头顶，宽度约占头 2/3） -->
+    <path d="M30,42 C35,30 43,25 54,25 C65,25 73,30 78,42
+             C71,34 63,30 54,30 C45,30 37,34 30,42 Z" fill="#FFFFFF"/>
+    <g fill="#FFFFFF">
+      <circle cx="31" cy="42" r="3.2"/><circle cx="37" cy="35" r="3.2"/>
+      <circle cx="44" cy="31" r="3.2"/><circle cx="50" cy="29" r="3.2"/>
+      <circle cx="58" cy="29" r="3.2"/><circle cx="64" cy="31" r="3.2"/>
+      <circle cx="71" cy="35" r="3.2"/><circle cx="77" cy="42" r="3.2"/>
+    </g>
+
+    <!-- 右侧小蓝蝴蝶结（贴在发带右端） -->
+    <path d="M77,39 L84,34 L84,45 Z" fill="#6C8BFF"/>
+    <path d="M77,39 L70,34 L70,45 Z" fill="#6C8BFF"/>
+    <circle cx="77" cy="39.5" r="2.1" fill="#FFFFFF"/>
+
+    <!-- 左眼：大虹膜 + 上眼睑压下来 + 睫毛线 -->
+    <ellipse cx="43.5" cy="67" rx="7.2" ry="8.2" fill="#3F5FB0"/>
+    <path d="M36.3,65.2 C36.8,61.2 39.8,58.8 43.5,58.8
+             C47.2,58.8 50.2,61.2 50.7,65.2
+             C47.9,63.1 39.1,63.1 36.3,65.2 Z" fill="#FDEDE2"/>
+    <path d="M36.5,65.3 C39.7,63.1 47.3,63.1 50.5,65.3"
+          fill="none" stroke="#2C3F72" stroke-width="2.1" stroke-linecap="round"/>
+    <circle cx="46.4" cy="70" r="2.3" fill="#FFFFFF" opacity="0.96"/>
+    <circle cx="40.8" cy="72" r="1" fill="#FFFFFF" opacity="0.65"/>
+
+    <!-- 右眼 -->
+    <ellipse cx="64.5" cy="67" rx="7.2" ry="8.2" fill="#3F5FB0"/>
+    <path d="M57.3,65.2 C57.8,61.2 60.8,58.8 64.5,58.8
+             C68.2,58.8 71.2,61.2 71.7,65.2
+             C68.9,63.1 60.1,63.1 57.3,65.2 Z" fill="#FDEDE2"/>
+    <path d="M57.5,65.3 C60.7,63.1 68.3,63.1 71.5,65.3"
+          fill="none" stroke="#2C3F72" stroke-width="2.1" stroke-linecap="round"/>
+    <circle cx="67.4" cy="70" r="2.3" fill="#FFFFFF" opacity="0.96"/>
+    <circle cx="61.8" cy="72" r="1" fill="#FFFFFF" opacity="0.65"/>
+
+    <!-- 腮红 -->
+    <ellipse cx="32" cy="75" rx="4.8" ry="2.7" fill="#F7B3BE" opacity="0.9"/>
+    <ellipse cx="76" cy="75" rx="4.8" ry="2.7" fill="#F7B3BE" opacity="0.9"/>
+
+    <!-- 小嘴 -->
+    <path d="M51.6,79 C52.8,80.6 53.7,80.8 54,80.8 C54.3,80.8 55.2,80.6 56.4,79"
+          fill="none" stroke="#D08490" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
+</svg>

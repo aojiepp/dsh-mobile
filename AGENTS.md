@@ -2,6 +2,16 @@
 
 Android 上独立跑完整 DSH 的壳工程。构建链、payload 管线、真机踩坑都记在这里。
 
+## 图标（SVG 真源）
+
+- 真源：`design/ic_launcher.svg`（蓝色大肥鱼 / 鲸鱼娘 Q 版头像，简笔扁平）。
+- 生成：`python design/svg2vector.py` → 覆盖 `res/drawable/ic_launcher_fg.xml`；
+  背景色在 `res/values/colors.xml` 的 `ic_launcher_bg`；`mipmap-anydpi-v26/*.xml` 是 adaptive-icon 壳。
+- 自检：`python design/vector2svg.py out.svg` 把生成的 vector 反渲染成 SVG，用 Edge headless 截图比对，
+  确认颜色/坐标没错（改过 svg2vector.py 必做）。
+- 通知栏小图标 `res/drawable/ic_stat_dsh.xml` 是白色鲸鱼剪影（手写 vector，要纯白单色）。
+- 内容要留在 adaptive icon 的 66/108dp 安全区内，否则启动器圆形遮罩会切掉鳍尖。
+
 ## 构建（零网络、全手工链）
 
 ```powershell
