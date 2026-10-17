@@ -21,8 +21,8 @@ APKSIGNER_JAR = os.path.join(BT, "lib", "apksigner.jar")
 # 新版已修复；aapt2/zipalign/apksigner 仍用 34.0.0 不动
 D8_JAR = os.path.join(SDK, "build-tools", "36.0.0", "lib", "d8.jar")
 
-VERSION_CODE = 24
-VERSION_NAME = "2.8"
+VERSION_CODE = 25
+VERSION_NAME = "2.9"
 APK_NAME = "dsh-mobile-v%s-debug.apk" % VERSION_NAME
 
 JAVA_HOME = os.environ.get("JAVA_HOME", "")

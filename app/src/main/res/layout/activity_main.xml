@@ -61,4 +61,73 @@
             android:text="@string/btn_settings"
             style="@style/DshButtonSecondary" />
     </LinearLayout>
+
+    <!-- v2.9 首启引导：解压运行环境时显示真实进度（盖在 WebView 之上） -->
+    <LinearLayout
+        android:id="@+id/boot_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_margin="16dp"
+        android:background="@drawable/bg_card"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/boot_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/boot_title"
+            android:textColor="@color/text_primary"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/boot_bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="14dp"
+            android:max="100"
+            android:progressBackgroundTint="@color/divider"
+            android:progressTint="@color/brand_primary" />
+
+        <TextView
+            android:id="@+id/boot_phase"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:lineSpacingExtra="2dp"
+            android:text="@string/boot_phase_wait"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/boot_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:lineSpacingExtra="3dp"
+            android:text="@string/boot_hint"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_boot_retry"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="@string/btn_boot_retry"
+            android:visibility="gone"
+            style="@style/DshButtonPrimary" />
+
+        <Button
+            android:id="@+id/btn_boot_settings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/btn_boot_settings"
+            style="@style/DshButtonSecondary" />
+    </LinearLayout>
 </FrameLayout>

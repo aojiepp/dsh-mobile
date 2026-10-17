@@ -2,7 +2,7 @@
 
 在 Android 手机上**独立运行完整 DeepSeek Harness（DSH）**的开源实现：一个原生 WebView 壳 + 内嵌 aarch64 Node.js 运行时 + 裁剪后的 DSH 依赖树。手机自己启动 DSH 服务（`127.0.0.1:3080`），不依赖电脑，可离线于 PC 使用。
 
-> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；v2.4 起 **bash / write / glob / grep 工具全部可用**（内置 GNU bash 5.3 + ripgrep 15.2，并修复了 Android 上 `link()` 被 SELinux 禁止导致的写文件失败）；v2.5 起内置**收纳箱**（设置页 → 收纳箱：按「工作台产物 / 会话记录」分类浏览，可提取到手机 Download 或删除）；v2.6 起原生界面**统一为 DeepSeek 灰色单风格**（灰底白卡 + DeepSeek 蓝 `#4D6BFE`，深浅合一只保留一套，夜间模式不再切换）；v2.7 起「连接电脑」模式**修复**：一键连接检测、针对性错误提示、断连自动重连（3s 起指数退避，上限 30s）+ 随仓库提供 `tools\pc_bridge.bat` 隧道自动维持工具；v2.8 起内嵌内核升级为 **DSH 0.2.0-rc.2**（适配 0.2.0 的 web 启动 token 鉴权与新的原生依赖，升级安装后自动重解压 payload）；界面细节继续迭代中，欢迎 issue / PR。
+> **状态：功能可用，UI 仍在优化中。** 核心链路（自启服务 → 对话 → agent 工具调用 → 会话落盘）已在真机端到端验证通过；v2.4 起 **bash / write / glob / grep 工具全部可用**（内置 GNU bash 5.3 + ripgrep 15.2，并修复了 Android 上 `link()` 被 SELinux 禁止导致的写文件失败）；v2.5 起内置**收纳箱**（设置页 → 收纳箱：按「工作台产物 / 会话记录」分类浏览，可提取到手机 Download 或删除）；v2.6 起原生界面**统一为 DeepSeek 灰色单风格**（灰底白卡 + DeepSeek 蓝 `#4D6BFE`，深浅合一只保留一套，夜间模式不再切换）；v2.7 起「连接电脑」模式**修复**：一键连接检测、针对性错误提示、断连自动重连（3s 起指数退避，上限 30s）+ 随仓库提供 `tools\pc_bridge.bat` 隧道自动维持工具；v2.8 起内嵌内核升级为 **DSH 0.2.0-rc.2**（适配 0.2.0 的 web 启动 token 鉴权与新的原生依赖，升级安装后自动重解压 payload）；v2.9 起**首启解压有真实进度条**（拷贝 / 解压 N/M 文件 / 校验三段，百分比按 zip 中央目录的真实解压尺寸算），解压前做**存储空间预检**、完成后做**完整性校验**，失败把原因直接显示并提供「重新解压」；解压期间**禁止重启内置服务**（避免两条命令打架），并加了**空白页兜底**。界面细节继续迭代中，欢迎 issue / PR。
 
 ## 工作原理
 
@@ -74,7 +74,7 @@ copy payload\payload.zip app\src\main\assets\payload.zip
 
 # 5. 构建 APK（构建目录必须是 ASCII 路径，中文路径会弄坏 aapt2）
 python tools\build_manual.py
-# 产物: build\apk\dsh-mobile-v2.8-debug.apk
+# 产物: build\apk\dsh-mobile-v2.9-debug.apk
 ```
 
 构建脚本首次运行会自动生成 `tools\debug.keystore`（已 gitignore，请勿提交）。
@@ -96,11 +96,12 @@ git push https://github.com:443/aojiepp/dsh-mobile.git main:main
 ## 安装与使用
 
 ```powershell
-adb install -r build\apk\dsh-mobile-v2.8-debug.apk
+adb install -r build\apk\dsh-mobile-v2.9-debug.apk
 ```
 
 - 真机（vivo/国产 ROM）安装会弹确认框，`tools\install_apk.ps1` 会通过 uiautomator 自动点击「已了解风险」+「继续安装」。
-- 首次启动解压 payload 约 1-3 分钟，之后秒开。**升级安装**（如 v2.7 → v2.8）会自动检测版本并重新解压 payload，同样约 1-3 分钟，期间显示解压进度。
+- 首次启动解压 payload 约 1-3 分钟，之后秒开。**升级安装**（如 v2.8 → v2.9）会自动检测版本并重新解压 payload，同样约 1-3 分钟。**v2.9 起解压过程有进度条**（标题/通知栏都会显示百分比与当前文件数），失败会直接给出原因（如「存储空间不足：需要约 290MB，当前可用 60MB」）并提供「重新解压」按钮。
+- **空间要求**：解压后运行时约 220MB；首次解压期间还要放一份临时 zip（约 70MB），建议手机预留 **300MB 以上**空闲空间。
 - **API Key**：App 设置页填写（写入 `$DSH_HOME/.env`，权限 600），或启动后在 DSH 界面「设置 → 模型」里存储（写入 `$DSH_HOME/.credentials.yaml`）。
 - **收纳箱**：设置页 → 收纳箱 —— 智能体产物按「工作台产物 / 会话记录」分类列出，可「提取」到手机 `Download/dsh-export/`（文件管理器可见）或直接「删除」；应用私有目录普通文件管理器看不到，这里是唯一入口。
 - 通知权限用于前台服务保活；进程随应用关闭而退出。
@@ -138,8 +139,9 @@ dsh web --host <电脑局域网IP> --trusted-host <电脑局域网IP>:3080
 | node-addon-require-builtin | 0.2.0 的插件路由拦截需读取 Node 内部 loader，官方途径是原生 addon（无 Android 产物）；补丁改为走 `--expose-internals` 直接 require（与 cordis-plugin-loader 的官方回退同款），功能无退化 |
 | web 启动 token | 0.2.0 起 `dsh web` 需带 token 的 URL 首次认证换 cookie；本机模式 App 自动从服务日志取 token（401 自动重试一次）；「连接电脑」模式若对端也是 0.2.0+，需把电脑端 `dsh web` 打印的完整带 token URL 填进服务地址 |
 | bash / glob / grep | v2.4 已内置 GNU bash 5.3 与 ripgrep 15.2（Termux aarch64），并注入了 `@vscode/ripgrep-android-arm64` 平台包（Android 的 node 报告 `process.platform === "android"`，非 linux）；四工具真机 PASS |
+| 首启解压 | v2.9 起有真实进度（拷贝/解压/校验三段）、空间预检、完整性校验与失败原因；解压中「重启内置服务」会被服务端忽略（UI 同时置灰），避免解压线程与重启打架 |
 | 交互式终端 / 图像附件 / 沙箱隔离 | 仍无对应原生原语（node-pty/sharp/landlock 无 arm64 产物），已打 stub，调用时干净报错而非崩溃；bash 工具不受影响 |
-| 体积 | APK 约 64MB，解压后占用约 300MB |
+| 体积 | APK 约 74MB，解压后运行时约 220MB（首解压需额外 ~290MB 空间） |
 | 服务生命周期 | node 进程随 App 进程存活；被系统杀掉后重新打开 App 会自动拉起 |
 | 连接电脑 | 电脑端 DSH Web 默认仅监听 127.0.0.1（上游安全设计）；手机经 adb reverse 隧道接入，App 内置连接检测 + 断连自动重连，`tools\pc_bridge.bat` 维持隧道 |
 | UI | 移动端补丁层已修主要布局冲突（输入栏/侧边栏/详情抽屉/悬浮按钮）；原生界面（设置/收纳箱/菜单/启动页）统一 DeepSeek 灰色单风格，深浅模式同一套 |

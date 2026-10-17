@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
     public static final String MODE_LOCAL = "local";
     public static final String MODE_PC = "pc";
     public static final String DEFAULT_URL = "http://127.0.0.1:3080";
-    public static final String VERSION = "2.8";
+    public static final String VERSION = "2.9";
 
     private WebView web;
     private ProgressBar progress;
@@ -56,6 +56,24 @@ public class MainActivity extends Activity {
     private boolean retriedAuth = false;
     /** 上次 onResume 时的运行模式，用于检测用户在设置页切换了模式 */
     private String lastMode = "";
+
+    // ---- v2.9 首启引导（解压进度）----
+    /** 引导卡片：首次启动解压运行环境时显示真实进度，避免"白屏发呆" */
+    private View bootView;
+    private ProgressBar bootBar;
+    private TextView bootTitle;
+    private TextView bootPhase;
+    private TextView bootHint;
+    private View bootRetry;
+    private final Handler bootHandler = new Handler();
+    private Runnable bootTask;
+    /** 引导态：为真时禁止 WebView 加载、也不让错误页覆盖引导卡片 */
+    private boolean bootstrapping = false;
+    /** 防止重复起「等端口」线程 */
+    private boolean waitingServer = false;
+    private int lastBootPct = -2;
+    private long lastBootProgressAt = 0;
+    private boolean bootFailed = false;
 
     /** 悬浮控制按钮（⚙），注入到页面右上，点击桥接原生菜单（DeepSeek 蓝单风格） */
     private static final String FAB_JS =
@@ -215,10 +233,23 @@ public class MainActivity extends Activity {
         errorView = findViewById(R.id.error_view);
         errorText = findViewById(R.id.error_text);
 
+        bootView = findViewById(R.id.boot_view);
+        bootBar = findViewById(R.id.boot_bar);
+        bootTitle = findViewById(R.id.boot_title);
+        bootPhase = findViewById(R.id.boot_phase);
+        bootHint = findViewById(R.id.boot_hint);
+        bootRetry = findViewById(R.id.btn_boot_retry);
+
         findViewById(R.id.btn_retry).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { reload(); }
+            @Override public void onClick(View v) { retryAction(); }
         });
         findViewById(R.id.btn_settings).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openSettings(); }
+        });
+        bootRetry.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { requestReextract(); }
+        });
+        findViewById(R.id.btn_boot_settings).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { openSettings(); }
         });
 
@@ -227,23 +258,14 @@ public class MainActivity extends Activity {
         lastMode = localMode() ? MODE_LOCAL : MODE_PC;
 
         if (localMode()) {
-            // 本机内置服务模式：确保前台服务在跑，等端口可用后加载页面
-            android.content.Intent svc = new android.content.Intent(this, DshServerService.class);
-            svc.setAction(DshServerService.ACTION_START);
-            if (Build.VERSION.SDK_INT >= 26) {
-                startForegroundService(svc);
-            } else {
-                startService(svc);
-            }
+            // 本机内置服务模式：先看运行环境是否就绪 —— 没就绪显示解压进度，
+            // 就绪则等服务端口后加载页面（v2.9：不再盲等 4 分钟白屏）
             if (savedInstanceState != null) {
                 web.restoreState(savedInstanceState);
                 String u = web.getUrl();
-                lastLoadedUrl = (u == null || u.isEmpty()) ? currentUrl() : u;
+                lastLoadedUrl = (u == null || u.isEmpty()) ? "" : u;
             }
-            if (!DshServerService.isPayloadReady(this)) {
-                showBootstrap();
-            }
-            waitLocalAndLoad();
+            ensureLocalBoot();
         } else {
             // 连接电脑模式：停掉本机服务，把 127.0.0.1:3080 让给 adb reverse 隧道
             stopLocalServer();
@@ -257,19 +279,133 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 轮询内置服务就绪后加载本地 DSH 页面 */
-    private void waitLocalAndLoad() {
+    // ---------- v2.9 本地启动流程：引导页 + 真实解压进度 ----------
+
+    private void startServerService(String action) {
+        android.content.Intent svc = new android.content.Intent(this, DshServerService.class);
+        svc.setAction(action);
+        if (Build.VERSION.SDK_INT >= 26) {
+            startForegroundService(svc);
+        } else {
+            startService(svc);
+        }
+    }
+
+    /** 本地模式入口：按「运行环境是否就绪」决定显示引导页还是直接等端口加载 */
+    private void ensureLocalBoot() {
+        startServerService(DshServerService.ACTION_START);
+        if (DshServerService.isPayloadReady(this)) {
+            hideBootstrap();
+            waitForServerAndLoad();
+        } else {
+            showBootstrap();
+        }
+    }
+
+    /** 显示解压引导卡片并开始轮询真实进度 */
+    private void showBootstrap() {
+        bootstrapping = true;
+        bootFailed = false;
+        lastBootPct = -2;
+        lastBootProgressAt = 0;
+        errorView.setVisibility(View.GONE);
+        bootView.setVisibility(View.VISIBLE);
+        bootTitle.setText(R.string.boot_title);
+        bootBar.setIndeterminate(true);
+        bootPhase.setText(R.string.boot_phase_wait);
+        bootHint.setText(R.string.boot_hint);
+        bootHint.setVisibility(View.VISIBLE);
+        bootRetry.setVisibility(View.GONE);
+        if (bootTask == null) {
+            bootTask = new Runnable() {
+                @Override public void run() { pollBootstrap(); }
+            };
+        }
+        bootHandler.removeCallbacks(bootTask);
+        bootHandler.post(bootTask);
+    }
+
+    private void pollBootstrap() {
+        if (!bootstrapping) return;
+        if (DshServerService.isPayloadReady(this)) {
+            // 解压完成：切到「等服务端口」，交给 waitForServerAndLoad
+            hideBootstrap();
+            waitForServerAndLoad();
+            return;
+        }
+        String pt = DshServerService.payloadState(this);
+        if (pt.startsWith(DshServerService.STATE_FAILED)) {
+            showBootFailure(DshServerService.extractError(this));
+            return;
+        }
+        int pct = DshServerService.payloadPercent(this);
+        long now = System.currentTimeMillis();
+        if (pct >= 0) {
+            if (pct != lastBootPct) {
+                lastBootPct = pct;
+                lastBootProgressAt = now;
+            }
+            bootBar.setIndeterminate(false);
+            bootBar.setProgress(pct);
+            String detail = DshServerService.payloadDetail(this);
+            bootPhase.setText(detail == null || detail.isEmpty()
+                    ? getString(R.string.boot_phase_pct, pct)
+                    : detail);
+            // 进度长时间不动 → 给用户一条自救路径
+            if (lastBootProgressAt > 0 && now - lastBootProgressAt > 25000
+                    && bootRetry.getVisibility() != View.VISIBLE) {
+                bootHint.setText(R.string.boot_stalled);
+                bootRetry.setVisibility(View.VISIBLE);
+            }
+        } else {
+            bootBar.setIndeterminate(true);
+            bootPhase.setText(R.string.boot_phase_wait);
+        }
+        bootHandler.postDelayed(bootTask, 400);
+    }
+
+    private void showBootFailure(String reason) {
+        bootFailed = true;
+        bootstrapping = false;
+        bootHandler.removeCallbacks(bootTask);
+        bootView.setVisibility(View.VISIBLE);
+        bootTitle.setText(R.string.boot_failed_title);
+        bootBar.setIndeterminate(false);
+        bootBar.setProgress(0);
+        String r = (reason == null || reason.isEmpty())
+                ? getString(R.string.status_failed) : reason;
+        bootPhase.setText(r);
+        bootHint.setText(R.string.boot_failed_hint);
+        bootHint.setVisibility(View.VISIBLE);
+        bootRetry.setVisibility(View.VISIBLE);
+        android.util.Log.e("DshMobile", "bootstrap failed: " + r);
+    }
+
+    private void hideBootstrap() {
+        bootstrapping = false;
+        bootHandler.removeCallbacks(bootTask);
+        bootView.setVisibility(View.GONE);
+    }
+
+    /** 「重新解压」：清运行时并重来（dsh-home 里的会话与凭据不受影响） */
+    private void requestReextract() {
+        lastBootPct = -2;
+        lastBootProgressAt = 0;
+        startServerService(DshServerService.ACTION_RESTART_EXTRACT);
+        showBootstrap();
+    }
+
+    /** 运行环境就绪后：等服务端口 → 取启动 token → 加载页面 */
+    private void waitForServerAndLoad() {
+        if (waitingServer) return;
+        waitingServer = true;
         new Thread(new Runnable() {
             @Override public void run() {
-                boolean payloadOk = true;
-                long deadline = System.currentTimeMillis() + 240000;
-                while (!DshServerService.isPayloadReady(MainActivity.this)) {
-                    if (System.currentTimeMillis() > deadline) { payloadOk = false; break; }
-                    try { Thread.sleep(800); } catch (InterruptedException e) { return; }
-                }
-                final boolean ok = payloadOk && DshServerService.waitForPort(3080, 120000);
+                final boolean ok = DshServerService.waitForPort(3080, 150000);
                 // 0.2.0 起 dsh web 有启动 token：从服务日志取带 token 的 URL
                 final String launchUrl = ok ? readLaunchUrl(30000) : null;
+                final String srv = DshServerService.serverState(MainActivity.this);
+                waitingServer = false;
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         if (ok) {
@@ -282,10 +418,7 @@ public class MainActivity extends Activity {
                                 reload();
                             }
                         } else {
-                            errorText.setText(getString(R.string.error_local));
-                            errorView.setVisibility(View.VISIBLE);
-                            findViewById(R.id.btn_retry).setVisibility(View.VISIBLE);
-                            findViewById(R.id.btn_settings).setVisibility(View.VISIBLE);
+                            showServerFailure(srv);
                         }
                     }
                 });
@@ -293,11 +426,28 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void showBootstrap() {
-        errorText.setText(getString(R.string.bootstrap_text));
+    private void showServerFailure(String srv) {
+        bootstrapping = false;
+        hideBootstrap();
+        StringBuilder sb = new StringBuilder(getString(R.string.error_local));
+        if (srv != null && !srv.isEmpty()) sb.append("\n\n").append(srv);
+        sb.append("\n\n").append(getString(R.string.error_local_hint));
+        errorText.setText(sb.toString());
         errorView.setVisibility(View.VISIBLE);
-        findViewById(R.id.btn_retry).setVisibility(View.GONE);
+        findViewById(R.id.btn_retry).setVisibility(View.VISIBLE);
         findViewById(R.id.btn_settings).setVisibility(View.VISIBLE);
+    }
+
+    /** 重试按钮：运行环境没准备好就重解压，其余情况重载页面 */
+    private void retryAction() {
+        if (localMode() && !DshServerService.isPayloadReady(this)) {
+            requestReextract();
+            return;
+        }
+        if (localMode() && !DshServerService.isPortOpen(3080, 400)) {
+            startServerService(DshServerService.ACTION_START);
+        }
+        reload();
     }
 
     private void requestNotificationPermission() {
@@ -414,6 +564,10 @@ public class MainActivity extends Activity {
                         String tweaks = FAB_JS
                                 + (desktopMode() ? TWEAKS_DESKTOP : (PATCH_JS + TWEAKS_MOBILE));
                         view.evaluateJavascript(tweaks, null);
+                        // v2.9 空白页兜底：服务半启动时页面可能停在纯白，给用户出路
+                        view.postDelayed(new Runnable() {
+                            @Override public void run() { checkBlankPage(view); }
+                        }, 6000);
                     }
                 });
             }
@@ -467,8 +621,29 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** JS 桥：页面悬浮按钮 -> 原生控制菜单 */
-    private class ShellBridge {
+    /** v2.9 空白页兜底：服务刚重启时可能有一瞬空白，持续空白说明渲染失败，
+     *  给出「重试 / 打开设置」而不是让用户对着白屏发呆 */
+    private void checkBlankPage(final WebView view) {
+        if (bootstrapping || loadFailed || !localMode()) return;
+        if (errorView.getVisibility() == View.VISIBLE) return;
+        view.evaluateJavascript(
+                "(function(){try{var b=document.body;if(!b)return 'blank';" +
+                "var t=(b.innerText||'').trim();var n=b.querySelectorAll('*').length;" +
+                "return (t.length===0&&n<10)?'blank':'ok';}catch(e){return 'blank';}})()",
+                new ValueCallback<String>() {
+                    @Override public void onReceiveValue(String v) {
+                        if (v != null && v.contains("blank") && !bootstrapping) {
+                            android.util.Log.w("DshMobile", "blank page detected");
+                            errorText.setText(getString(R.string.err_blank_page));
+                            errorView.setVisibility(View.VISIBLE);
+                            findViewById(R.id.btn_retry).setVisibility(View.VISIBLE);
+                            findViewById(R.id.btn_settings).setVisibility(View.VISIBLE);
+                        }
+                    }
+                });
+    }
+
+    /** JS 桥：页面悬浮按钮 -> 原生控制菜单 */    private class ShellBridge {
         @JavascriptInterface
         public void openMenu() {
             runOnUiThread(new Runnable() {
@@ -510,6 +685,11 @@ public class MainActivity extends Activity {
     }
 
     private void reload() {
+        // 运行环境还没解压完时不要加载：WebView 会白屏，且会把引导卡片顶掉
+        if (localMode() && !DshServerService.isPayloadReady(this)) {
+            showBootstrap();
+            return;
+        }
         String url = currentUrl();
         lastLoadedUrl = url;
         errorView.setVisibility(View.GONE);
@@ -517,6 +697,8 @@ public class MainActivity extends Activity {
     }
 
     private void showError(String detail) {
+        // 引导态下页面可能只是服务还没起来，别用错误页盖住进度卡片
+        if (bootstrapping) return;
         StringBuilder msg = new StringBuilder(getString(R.string.error_connect));
         String hint = errorHint();
         if (!hint.isEmpty()) msg.append("\n\n").append(hint);
@@ -600,18 +782,15 @@ public class MainActivity extends Activity {
         boolean modeChanged = !nowMode.equals(lastMode);
         lastMode = nowMode;
         if (localMode()) {
-            android.content.Intent svc = new android.content.Intent(this, DshServerService.class);
-            svc.setAction(DshServerService.ACTION_START);
-            if (Build.VERSION.SDK_INT >= 26) {
-                startForegroundService(svc);
-            } else {
-                startService(svc);
-            }
+            startServerService(DshServerService.ACTION_START);
         } else {
             stopLocalServer();
         }
         String want = currentUrl();
         if (!lastLoadedUrl.isEmpty() && !want.equals(lastLoadedUrl)) reload();
+
+        // 从设置页回来：可能刚点过「重新解压」，重新拉起引导轮询
+        if (bootstrapping) showBootstrap();
 
         // 「连接电脑」模式恢复策略：报错页立即重连；长时间后台后长连接/流可能已死，重载恢复
         if (!localMode()) {
@@ -627,7 +806,7 @@ public class MainActivity extends Activity {
         // 用户在设置页切换了模式：按新模式重建页面
         if (modeChanged) {
             if (localMode()) {
-                waitLocalAndLoad();
+                ensureLocalBoot();
             } else {
                 reload();
             }
@@ -644,6 +823,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         cancelAutoRetry();
+        bootHandler.removeCallbacks(bootTask); // 后台不轮询，回前台由 onResume 恢复
         lastPauseAt = System.currentTimeMillis();
         web.onPause();
         super.onPause();

@@ -41,8 +41,12 @@ public class SettingsActivity extends Activity {
     private TextView pcStatus;
     private TextView hintConn;
     private Button btnRestart;
+    private Button btnReextract;
     private Button btnTest;
     private SharedPreferences prefs;
+    /** v2.9：状态每秒刷新（解压百分比/停滞判断需要实时值，不能只在 onResume 刷一次） */
+    private final android.os.Handler statusHandler = new android.os.Handler();
+    private Runnable statusTask;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +65,7 @@ public class SettingsActivity extends Activity {
         pcStatus = findViewById(R.id.pc_status);
         hintConn = findViewById(R.id.hint_conn);
         btnRestart = findViewById(R.id.btn_restart);
+        btnReextract = findViewById(R.id.btn_reextract);
         btnTest = findViewById(R.id.btn_test);
 
         boolean local = MainActivity.MODE_LOCAL.equals(
@@ -86,6 +91,10 @@ public class SettingsActivity extends Activity {
             @Override public void onClick(View v) { restartServer(); }
         });
 
+        btnReextract.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { confirmReextract(); }
+        });
+
         btnTest.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { testConnection(); }
         });
@@ -106,6 +115,22 @@ public class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshStatus();
+        if (statusTask == null) {
+            statusTask = new Runnable() {
+                @Override public void run() {
+                    refreshStatus();
+                    statusHandler.postDelayed(statusTask, 1000);
+                }
+            };
+        }
+        statusHandler.removeCallbacks(statusTask);
+        statusHandler.postDelayed(statusTask, 1000);
+    }
+
+    @Override
+    protected void onPause() {
+        statusHandler.removeCallbacks(statusTask);
+        super.onPause();
     }
 
     private boolean localChecked() { return radioLocal.isChecked(); }
@@ -114,6 +139,7 @@ public class SettingsActivity extends Activity {
     private void toggleModeUi() {
         boolean local = localChecked();
         btnRestart.setVisibility(local ? View.VISIBLE : View.GONE);
+        btnReextract.setVisibility(local ? View.VISIBLE : View.GONE);
         apiKeyInput.setEnabled(local);
         apiKeyHint.setEnabled(local);
         btnTest.setVisibility(local ? View.GONE : View.VISIBLE);
@@ -127,17 +153,33 @@ public class SettingsActivity extends Activity {
             statusText.setText(R.string.status_pc_note);
             return;
         }
-        btnRestart.setEnabled(true);
         String st = DshServerService.serverState(this);
         String pt = DshServerService.payloadState(this);
-        if (pt.startsWith(DshServerService.STATE_EXTRACTING)) {
-            String pct = pt.length() > pt.indexOf(':') + 1 ? pt.substring(pt.indexOf(':') + 1) : "";
-            statusText.setText(getString(R.string.status_extracting) + " " + pct + "%");
+        boolean extracting = pt.startsWith(DshServerService.STATE_EXTRACTING);
+        // 解压期间禁止「重启」（解压线程还在写运行时树，重启只会让状态乱跳）
+        btnRestart.setEnabled(!extracting);
+        btnReextract.setEnabled(!extracting);
+        btnRestart.setText(extracting ? R.string.btn_restart_disabled : R.string.btn_restart_server);
+
+        if (extracting) {
+            int pct = DshServerService.payloadPercent(this);
+            StringBuilder sb = new StringBuilder(pct >= 0
+                    ? getString(R.string.status_extracting_pct, pct)
+                    : getString(R.string.status_extracting));
+            String detail = DshServerService.payloadDetail(this);
+            if (detail != null && !detail.isEmpty()) sb.append("\n").append(detail);
+            long ts = DshServerService.payloadUpdatedAt(this);
+            if (ts > 0 && System.currentTimeMillis() - ts > 25000) {
+                sb.append("\n").append(getString(R.string.status_extract_stalled));
+            }
+            statusText.setText(sb.toString());
         } else if (pt.startsWith(DshServerService.STATE_FAILED)) {
-            statusText.setText(getString(R.string.status_failed));
+            String err = DshServerService.extractError(this);
+            statusText.setText(getString(R.string.status_failed)
+                    + (err == null || err.isEmpty() ? "" : "\n" + err));
         } else if (st == null || st.isEmpty()) {
             statusText.setText(DshServerService.isPayloadReady(this)
-                    ? R.string.status_ready : R.string.status_extracting);
+                    ? R.string.status_ready : R.string.status_no_info);
         } else if (st.equals(DshServerService.STATE_RUNNING)) {
             statusText.setText(R.string.status_running);
         } else if (st.startsWith(DshServerService.STATE_EXITED)) {
@@ -149,6 +191,31 @@ public class SettingsActivity extends Activity {
         } else {
             statusText.setText(getString(R.string.status_starting));
         }
+    }
+
+    /** 二次确认后清运行时重解压（会话/凭据在 dsh-home，不动） */
+    private void confirmReextract() {
+        if (!localChecked()) return;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.btn_reextract)
+                .setMessage(R.string.reextract_confirm)
+                .setNegativeButton(R.string.dlg_cancel, null)
+                .setPositiveButton(R.string.btn_reextract, new android.content.DialogInterface.OnClickListener() {
+                    @Override public void onClick(android.content.DialogInterface d, int w) {
+                        android.content.Intent it = new android.content.Intent(
+                                SettingsActivity.this, DshServerService.class);
+                        it.setAction(DshServerService.ACTION_RESTART_EXTRACT);
+                        if (Build.VERSION.SDK_INT >= 26) {
+                            startForegroundService(it);
+                        } else {
+                            startService(it);
+                        }
+                        statusText.setText(R.string.status_extracting);
+                        btnRestart.setEnabled(false);
+                        btnReextract.setEnabled(false);
+                    }
+                })
+                .show();
     }
 
     private void save() {
@@ -284,6 +351,12 @@ public class SettingsActivity extends Activity {
 
     private void restartServer() {
         if (!localChecked()) return;
+        // 解压期间不允许重启：解压线程还在写运行时树（服务端也会忽略该命令）
+        if (DshServerService.isExtractingNow()
+                || DshServerService.payloadState(this).startsWith(DshServerService.STATE_EXTRACTING)) {
+            statusText.setText(R.string.status_extracting);
+            return;
+        }
         // 单条 RESTART 命令原子重启（服务内部杀旧 node 再拉新），
         // 避免 STOP 后立刻 startForegroundService 的竞态导致系统杀进程
         Intent restart = new Intent(this, DshServerService.class);
