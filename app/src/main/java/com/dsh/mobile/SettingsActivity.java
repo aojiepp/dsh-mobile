@@ -187,7 +187,10 @@ public class SettingsActivity extends Activity {
         } else if (st.equals("stopped")) {
             statusText.setText(R.string.status_stopped);
         } else if (st.startsWith(DshServerService.STATE_FAILED)) {
-            statusText.setText(getString(R.string.status_failed) + "\n" + st);
+            String d = st;
+            String p = DshServerService.STATE_FAILED + ":";
+            if (d.startsWith(p)) d = d.substring(p.length());
+            statusText.setText(getString(R.string.status_failed) + "\n" + d);
         } else {
             statusText.setText(getString(R.string.status_starting));
         }
