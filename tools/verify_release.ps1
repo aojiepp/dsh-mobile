@@ -89,10 +89,15 @@ function Phase-Logs {
 
 function Phase-Perf {
     Write-Host "== perf：先在手机上开一轮活跃对话，脚本采样 30 次 top =="
-    $samples = & $ADB shell top -d 1 -n 30 | Select-String $PKG
+    $samples = & $ADB shell top -b -d 1 -n 20 | Select-String "$PKG| node$"
     $cpu = @()
     foreach ($s in $samples) {
-        if ($s.ToString() -match "(\d+(\.\d+)?)%") { $cpu += [double]$Matches[1] }
+        $line = $s.ToString()
+        # vivo/toybox top 行格式：PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ NAME
+        # 行里 CPU% 列不带 % 号 → 按列解析（S 状态列后面的第一个浮点数）
+        if ($line -match "^\s*\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+[A-Z]\s+(\d+(\.\d+)?)\s+") {
+            $cpu += [double]$Matches[1]
+        }
     }
     if ($cpu.Count -gt 0) {
         $avg = ($cpu | Measure-Object -Average).Average

@@ -186,8 +186,23 @@ public class SettingsActivity extends Activity {
     }
 
     private void refreshStatus() {
+        // 端口探测是网络操作，必须后台线程跑完再回 UI（主线程 connect 会
+        // NetworkOnMainThread → 恒 false；旧版诊断卡片恒显示「未监听」就是这里，
+        // 连带 exited 陈旧状态的端口复核也一直失效）。
+        Thread probe = new Thread(new Runnable() {
+            @Override public void run() {
+                final boolean portOpen = DshServerService.isPortOpen(3080, 300);
+                statusHandler.post(new Runnable() {
+                    @Override public void run() { applyStatus(portOpen); }
+                });
+            }
+        }, "dsh-status-probe");
+        probe.setDaemon(true);
+        probe.start();
+    }
+
+    private void applyStatus(boolean portOpen) {
         // 诊断：端口 3080 实时状态（每秒一次，和下面的服务状态共用一次探测）
-        boolean portOpen = DshServerService.isPortOpen(3080, 300);
         if (diagPort != null) {
             diagPort.setText(getString(R.string.diag_port_label,
                     getString(portOpen ? R.string.diag_port_open : R.string.diag_port_closed)));

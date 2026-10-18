@@ -14,6 +14,9 @@ Android 上独立跑完整 DSH 的壳工程。构建链、payload 管线、真�
   （`launch_url`/`launch_url_ts`，MainActivity.readLaunchUrl 是 prefs 优先、日志兜底）、删 legacy `manual.log`、
   日志/.env 刷 600（先全关再开属主位，单独 setReadable(true,true) 清不掉 group/other）。
   **cleartext 保持 true 是用户明确决策**（「连接电脑」模式局域网 http 直连在用），设置页对非回环 http 有红字警告。
+  watcher 抓到 URL 行先写 prefs 再把日志里该 token **就地等长打码**（pwrite 已固化字节，不影响 node 追加）。
+  Termux git 还要 `GIT_CONFIG_NOSYSTEM=1`（编死的系统 gitconfig 一读就 fatal）；
+  设置页端口探测必须在后台线程（主线程 connect → NetworkOnMainThread → 恒「未监听」）。
 - **工具链进 payload**：git 2.56 / curl 8.23 / openssh 10.6 / npm 11.21 / pnpm 10.34.7 / tar / less + DT_NEEDED 闭包
   （清单与版本在 `payload/TOOLCHAIN.md`）。`extract_termux.py` 支持整子树映射 + 符号链接物化 wrapper；
   `patch_runpath.py` 扩到 libexec/**。`ToolchainEnv.apply()` 在服务 spawn 前注入 PATH/GIT_EXEC_PATH/GIT_TEMPLATE_DIR/
@@ -24,7 +27,9 @@ Android 上独立跑完整 DSH 的壳工程。构建链、payload 管线、真�
   **DshBridge**（JS 名仍 DshShell）：openUrl/shareText/saveToDownloads/pickFile，全部过 origin 白名单
   （回环或 server_url 同 host），saveToDownloads 校验 canonical 必须在 files/ 内。
 - **性能**：PATCH_JS 重写——删 setInterval(2000)、observer 回调只排 rAF（帧内 disconnect→patch→observe 断自激）、
-  读写分离 + setIfDiff、`body *` 全树扫描改 5 个定向选择器。自证桩 `__dshmPatchCount/__dshmPatchMs`。
+  读写分离 + setIfDiff、`body *` 全树扫描改 5 个定向选择器。自证桩 `__dshmPatchCount/__dshmPatchMs`（需 debug 包 + CDP 读）。
+  真机实测（2026-10-18 vivo V2339A，top -b 分进程）：活跃对话 UI 进程 avg 66.9% / max 81%（旧基线 113% 单核），
+  node avg 23.7%；对话后回落 avg 17.3%。自激循环已结构性消除，残量以流式渲染为主；45% 目标线未达，持续观察。
 - **瘦身**：删 .d.ts/.d.cts/.d.mts（2309 个/9.82MB）+ yarn 误打包文件 + .package-lock；**lighthouse_worker.js 不能删**
   （被 devtools chunks 引用，删了 Lighthouse 面板挂）。prepare 末尾自动写 `payload/size_report.txt`（top-50）。
 - **payload 校验**：build_payload.py 生成 `payload.sha256`，两个文件都要拷进 assets/；解压前校验，不匹配 failExtract。
