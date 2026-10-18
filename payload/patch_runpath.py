@@ -1,7 +1,16 @@
 # patch_runpath.py — 把 Termux 二进制里硬编码的 RUNPATH 改为 $ORIGIN 相对路径
+#
+# v3：遍历范围扩到 libexec/**（git 子命令二进制在 libexec/git-core/，非 ELF 自动跳过）。
+#   bin/xxx                  → $ORIGIN/../lib
+#   libexec/xxx              → $ORIGIN/../lib
+#   libexec/git-core/xxx     → $ORIGIN/../../lib
+#   lib/*.so                 → $ORIGIN
+# 独立运行：python payload/patch_runpath.py
 import os, struct, sys
 
-def patch_runpath(path, new_rpath):
+
+def patch_runpath(path, new_rpath, label=None):
+    label = label or path
     with open(path, 'r+b') as f:
         d = f.read()
     assert d[:4] == b'\x7fELF'
@@ -48,15 +57,45 @@ def patch_runpath(path, new_rpath):
                 raise SystemExit('new rpath too long for %s: %r > %r' % (path, new_rpath, old))
             f.seek(strtab + val)
             f.write(new_rpath.encode('ascii') + b'\0' + b'\0' * (len(old) - len(new_rpath)))
-            print('patched', os.path.basename(path), ':', old, '->', new_rpath)
+            print('patched', label, ':', old, '->', new_rpath)
             patched += 1
     return patched
 
+
+def target_rpath(rel_dir):
+    """相对前缀的目录 → $ORIGIN 形式的 RUNPATH。"""
+    rel_dir = rel_dir.replace('\\', '/').strip('/')
+    if rel_dir == 'lib':
+        return '$ORIGIN'
+    depth = 0 if rel_dir in ('', '.') else rel_dir.count('/') + 1
+    return '$ORIGIN/' + ('../' * depth) + 'lib'
+
+
+def patch_tree(root):
+    """遍历 bin/、libexec/（递归）、lib/，只处理 ELF。返回 (patched, skipped)。"""
+    patched = skipped = 0
+    targets = [os.path.join(root, 'bin')]
+    libexec = os.path.join(root, 'libexec')
+    for dirpath, _, files in os.walk(libexec):
+        targets.append(dirpath)
+    targets.append(os.path.join(root, 'lib'))
+    for base in targets:
+        if not os.path.isdir(base):
+            continue
+        for fn in sorted(os.listdir(base)):
+            p = os.path.join(base, fn)
+            if not os.path.isfile(p):
+                continue
+            with open(p, 'rb') as f:
+                if f.read(4) != b'\x7fELF':
+                    skipped += 1           # wrapper 脚本 / 数据文件
+                    continue
+            new = target_rpath(os.path.relpath(base, root).replace('\\', '/'))
+            patched += patch_runpath(p, new, os.path.relpath(p, root))
+    print('all patched: %d ELF, %d non-ELF skipped' % (patched, skipped))
+    return patched, skipped
+
+
 if __name__ == '__main__':
-    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'termux', 'usr')
-    for fn in sorted(os.listdir(os.path.join(root, 'bin'))):
-        patch_runpath(os.path.join(root, 'bin', fn), '$ORIGIN/../lib')
-    libdir = os.path.join(root, 'lib')
-    for fn in sorted(os.listdir(libdir)):
-        patch_runpath(os.path.join(libdir, fn), '$ORIGIN')
-    print('all patched')
+    prefix = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'termux', 'usr')
+    patch_tree(prefix)

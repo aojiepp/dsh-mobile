@@ -325,6 +325,8 @@ public class DshServerService extends Service {
                 pb.environment().put("LANG", "C.UTF-8");
                 pb.environment().put("LC_ALL", "C.UTF-8");
                 pb.environment().put("NODE_NO_WARNINGS", "1");
+                // 开发工具链（git/curl/openssh/npm/pnpm）：PATH、git CA/exec-path、npm/pnpm 落盘目录
+                ToolchainEnv.apply(pb.environment(), this);
                 pb.redirectErrorStream(true);
                 File serverLog = new File(getFilesDir(), SERVER_LOG);
                 pb.redirectOutput(serverLog);
@@ -693,13 +695,12 @@ public class DshServerService extends Service {
                 Log.i(TAG, "extract: unzip done " + count + " files, " + mb(done)
                         + " in " + (System.currentTimeMillis() - t1) + "ms");
 
-                // ---- 5. 可执行位（zip 不保留权限）----
-                for (String bin : new String[]{"node", "bash", "rg"}) {
-                    File b = new File(new File(payloadDir(this), "termux/usr/bin"), bin);
-                    if (b.exists() && !b.setExecutable(true, false)) {
-                        Log.w(TAG, "setExecutable returned false: " + bin);
-                    }
-                }
+                // ---- 5. 可执行位（zip 不保留权限）：bin/ + libexec/（含 git-core）全量 ----
+                // 不能只 chmod 三件套：git/curl/ssh/npm wrapper 以及 libexec/git-core/**
+                // 里的 dashed 入口都需要可执行位。
+                File usrDir = new File(payloadDir(this), "termux/usr");
+                setTreeExecutable(new File(usrDir, "bin"));
+                setTreeExecutable(new File(usrDir, "libexec"));
 
                 // ---- 6. 完整性校验（字节数 + 关键文件）----
                 reportExtractProgress(96, getString(R.string.extract_phase_verify));
@@ -900,6 +901,18 @@ public class DshServerService extends Service {
             }
         }
         return f.delete() && ok;
+    }
+
+    /** 递归给一棵树里的所有文件置可执行位（zip 不保留 unix mode）。 */
+    private static void setTreeExecutable(File dir) {
+        File[] kids = dir.listFiles();
+        if (kids == null) return;
+        for (File f : kids) {
+            if (f.isDirectory()) setTreeExecutable(f);
+            else if (!f.setExecutable(true, false)) {
+                Log.w(TAG, "setExecutable returned false: " + f.getAbsolutePath());
+            }
+        }
     }
 
     // ---------- 通知 ----------
