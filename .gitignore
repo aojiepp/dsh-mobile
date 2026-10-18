@@ -5,6 +5,9 @@ build/
 
 # 签名密钥（构建脚本首次运行会自动生成 debug.keystore，请勿提交）
 tools/debug.keystore
+# 签名口令与将来公开发布用的 release key（v2.11 起口令从源码移到这里）
+tools/signing.properties
+tools/release.keystore
 
 # payload 运行时与依赖树 —— 全部由 payload/ 管线脚本生成，不入库：
 #   payload/termux/       解包后的 Termux Node 运行时（node + .so）
