@@ -13,12 +13,15 @@ import android.os.StatFs;
 import android.util.Log;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Enumeration;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -64,6 +67,19 @@ public class DshServerService extends Service {
     private static final int NOTIF_ID = 1;
     private static final String CHANNEL_ID = "dsh_server";
     private static final String PAYLOAD_ZIP = "payload.zip";
+    /** 服务日志（node stdout/stderr；设置页「查看服务日志」也读它） */
+    private static final String SERVER_LOG = "dsh-server.log";
+    /** 轮转出去的上一代日志（启动时把 SERVER_LOG 改名过来并打码） */
+    private static final String SERVER_LOG_ROTATED = "dsh-server.1.log";
+    /** 历史遗留文件：老版本手写日志，里面可能有旧 token，启动时清掉 */
+    private static final String LEGACY_MANUAL_LOG = "manual.log";
+    /** log-watcher 抓到带 token 的启动 URL 后写入的 prefs key；
+     *  MainActivity 优先读它（时间戳不早于本次等待起点才信），读不到再扫日志兜底 */
+    public static final String KEY_LAUNCH_URL = "launch_url";
+    public static final String KEY_LAUNCH_URL_TS = "launch_url_ts";
+    /** 日志打码：query 里的令牌值（?token= / &api_key= / &key=）替换为 *** */
+    private static final Pattern LOG_TOKEN_PATTERN =
+            Pattern.compile("([?&](token|api_key|key)=)[^&\\s]+");
     private static final int MAX_RESTARTS = 5;
     private static final long RESTART_DELAY_MS = 3000;
     /** 解压前额外预留（数据库/tmp/日志） */
@@ -256,6 +272,12 @@ public class DshServerService extends Service {
         if (!tmp.exists()) tmp.mkdirs();
         if (!home.exists()) home.mkdirs();
 
+        // 安全基线（真机安全审计整改）：都赶在解压之前做——首启解压要几分钟，
+        // 清 token 这种事不能等。
+        rotateServerLog();          // 上一轮日志改名 .1 并对令牌打码
+        deleteLegacyManualLog();    // 历史遗留 manual.log（含旧 token），存在才删
+        hardenEnvPerms(home);       // dsh-home/.env 若存在，权限刷成 600 语义
+
         if (!isPayloadReady(this)) {
             if (!extractPayload()) {
                 setServerState(this, STATE_FAILED);
@@ -304,8 +326,14 @@ public class DshServerService extends Service {
                 pb.environment().put("LC_ALL", "C.UTF-8");
                 pb.environment().put("NODE_NO_WARNINGS", "1");
                 pb.redirectErrorStream(true);
-                pb.redirectOutput(new File(getFilesDir(), "dsh-server.log"));
+                File serverLog = new File(getFilesDir(), SERVER_LOG);
+                pb.redirectOutput(serverLog);
                 nodeProcess = pb.start();
+                // 新日志落盘即收紧成仅属主可读写：首屏就印着带 token 的启动 URL
+                hardenOwnerOnly(serverLog);
+                // log-watcher：tail 日志抓带 token 的启动 URL 写进 prefs，
+                // MainActivity 直接取用，不用再等日志扫描窗口
+                startLogWatcher(nodeProcess, gen);
                 Log.i(TAG, "node spawned, waiting for exit");
                 setServerState(this, STATE_STARTING);
                 // 端口真起来了再置 RUNNING（v2.9.1：以前状态永远停在 starting）；
@@ -375,6 +403,165 @@ public class DshServerService extends Service {
         }
     }
 
+    private static boolean procAlive(Process p) {
+        try {
+            p.exitValue();
+            return false;
+        } catch (IllegalThreadStateException e) {
+            return true; // 还没退出
+        }
+    }
+
+    // ---------- 安全基线：日志轮转 / 打码 / 权限 ----------
+
+    /** 把文件权限刷成「仅属主可读写」（600 语义）：先全关再只开属主——
+     *  两步缺一不可，setReadable(true,true) 不会清掉 group/other 已有的读位。 */
+    private static void hardenOwnerOnly(File f) {
+        f.setReadable(false, false);
+        f.setWritable(false, false);
+        f.setReadable(true, true);
+        f.setWritable(true, true);
+    }
+
+    /** 启动日志轮转：本次启动前把 dsh-server.log 改名为 dsh-server.1.log
+     *  （先删更旧的 .1），再对 .1 做 token 打码。打码只在轮转时做——
+     *  运行中的日志 node 还在追加，边写边改有竞态。 */
+    private void rotateServerLog() {
+        File cur = new File(getFilesDir(), SERVER_LOG);
+        File old = new File(getFilesDir(), SERVER_LOG_ROTATED);
+        if (old.exists() && !old.delete()) {
+            Log.w(TAG, "log rotate: delete old .1 failed");
+        }
+        if (!cur.exists()) return;
+        if (!cur.renameTo(old)) {
+            Log.w(TAG, "log rotate: rename failed");
+            return;
+        }
+        redactLogTokens(old);
+        hardenOwnerOnly(old);
+    }
+
+    /** 对轮转出的旧日志逐行打码（流式读写，不把整文件装进内存）；
+     *  有改动才用临时文件改名覆盖，没动过不重写。 */
+    private void redactLogTokens(File f) {
+        File tmp = new File(f.getParentFile(), f.getName() + ".redact");
+        boolean changed = false;
+        try (java.io.BufferedReader br = new java.io.BufferedReader(
+                     new java.io.InputStreamReader(new FileInputStream(f), "UTF-8"));
+             java.io.BufferedWriter bw = new java.io.BufferedWriter(
+                     new java.io.OutputStreamWriter(new FileOutputStream(tmp), "UTF-8"))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String masked = LOG_TOKEN_PATTERN.matcher(line).replaceAll("$1***");
+                if (!masked.equals(line)) changed = true;
+                bw.write(masked);
+                bw.newLine();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "log rotate: redact failed", e);
+            tmp.delete();
+            return;
+        }
+        if (!changed) {
+            tmp.delete();
+            return;
+        }
+        if (!f.delete() || !tmp.renameTo(f)) {
+            Log.w(TAG, "log rotate: replace with redacted copy failed");
+            tmp.delete();
+        }
+    }
+
+    /** 历史遗留清理：老版本的手写日志里可能有旧 token，存在才删 */
+    private void deleteLegacyManualLog() {
+        File f = new File(getFilesDir(), LEGACY_MANUAL_LOG);
+        if (!f.exists()) return;
+        if (f.delete()) {
+            Log.i(TAG, "legacy manual.log deleted");
+        } else {
+            Log.w(TAG, "legacy manual.log delete failed");
+        }
+    }
+
+    /** dsh-home/.env（API Key 落点）若存在，权限刷成 600 语义。
+     *  设置页写入时已做过一次；服务每次启动再兜一遍，防旧版本残留。 */
+    private void hardenEnvPerms(File home) {
+        File env = new File(home, ".env");
+        if (!env.exists()) return;
+        hardenOwnerOnly(env);
+        env.setExecutable(false, false);
+    }
+
+    // ---------- 安全基线：log-watcher（token URL 直达 prefs） ----------
+
+    /** tail 服务日志，发现行首 "dsh web: http" 就把带 token 的完整 URL 写进
+     *  SharedPreferences（launch_url + launch_url_ts），MainActivity 直接取用。
+     *  进程退出或 bootGen 换代时线程结束。全程只读日志文件——node 在追加，
+     *  边写边改有竞态，所以打码只留给轮转做。 */
+    private void startLogWatcher(final Process proc, final int gen) {
+        Thread t = new Thread(new Runnable() {
+            @Override public void run() {
+                File log = new File(getFilesDir(), SERVER_LOG);
+                long pos = 0;
+                while (gen == bootGen && procAlive(proc) && !stopping) {
+                    try {
+                        pos = scanLogNewLines(log, pos, gen);
+                    } catch (Exception e) {
+                        Log.w(TAG, "log watcher: scan failed", e);
+                    }
+                    sleepQuietly(400);
+                }
+            }
+        }, "dsh-logwatch");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** 从 pos 起读新增的行，返回新的读取位置；日志被截断重写（node 重启时
+     *  Redirect.to 会清空）就回到 0。文件末尾没换行的残行不消费、留给下一轮，
+     *  防止抓到半个 URL。返回新位置。 */
+    private long scanLogNewLines(File log, long pos, int gen) throws IOException {
+        if (!log.exists()) return pos;
+        RandomAccessFile raf = new RandomAccessFile(log, "r");
+        try {
+            long len = raf.length();
+            if (len < pos) pos = 0;
+            raf.seek(pos);
+            String line;
+            while ((line = raf.readLine()) != null) {
+                long ptr = raf.getFilePointer();
+                if (ptr >= len) {
+                    // 读到文件末尾：以换行符结尾才算整行
+                    raf.seek(ptr - 1);
+                    boolean terminated = raf.read() == '\n';
+                    raf.seek(ptr);
+                    if (!terminated) break; // 残行留给下一轮
+                }
+                pos = ptr;
+                handleLogLine(line, gen);
+            }
+            return pos;
+        } finally {
+            raf.close();
+        }
+    }
+
+    /** watcher 命中 "dsh web: http"：写 prefs。解析规则与 MainActivity
+     *  的日志扫描保持一致（取到空格前的第一段，去掉可能跟着的 LAN 部分） */
+    private void handleLogLine(String line, int gen) {
+        if (!line.startsWith("dsh web: http")) return;
+        String u = line.substring("dsh web: ".length()).trim();
+        int sp = u.indexOf(' ');
+        if (sp > 0) u = u.substring(0, sp);
+        if (u.isEmpty()) return;
+        getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LAUNCH_URL, u)
+                .putString(KEY_LAUNCH_URL_TS, String.valueOf(System.currentTimeMillis()))
+                .apply();
+        Log.i(TAG, "log watcher: launch url captured (gen=" + gen + ")");
+    }
+
     // ---------- payload 解压 ----------
 
     /**
@@ -400,6 +587,14 @@ public class DshServerService extends Service {
             putState(this, KEY_EXTRACT_ERROR, "");
             File tmpZip = new File(getFilesDir(), "payload.zip.tmp");
             try {
+                // ---- 0. payload 完整性校验（解压前；不一致就别白解压一遍）----
+                reportExtractProgress(0, getString(R.string.extract_phase_verify));
+                String checksumError = verifyPayloadChecksum();
+                if (checksumError != null) {
+                    failExtract(getString(R.string.extract_err_checksum, checksumError));
+                    deleteRecursively(payloadDir(this));
+                    return false;   // finally 会把 extractingNow 复位、删掉临时 zip
+                }
                 // ---- 1. assets -> 临时 zip（assets 流不支持随机访问） ----
                 long t0 = System.currentTimeMillis();
                 long copied = 0;
@@ -543,6 +738,44 @@ public class DshServerService extends Service {
                 tmpZip.delete();
             }
         }
+    }
+
+    /**
+     * v2.11：解压前校验 payload.zip 的 sha256。
+     * assets/payload.sha256 由 payload/build_payload.py 生成（sha256sum 行：
+     * "<64 位十六进制>  payload.zip"）。返回 null 表示校验通过或没有清单
+     * （旧 APK 兼容）；否则返回失败原因。
+     */
+    private String verifyPayloadChecksum() {
+        String expected;
+        try (InputStream in = getAssets().open("payload.sha256")) {
+            byte[] buf = new byte[4096];
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            String line = new String(bos.toByteArray(), "UTF-8").trim();
+            int sp = line.indexOf(' ');
+            expected = (sp > 0 ? line.substring(0, sp) : line).trim()
+                    .toLowerCase(java.util.Locale.US);
+        } catch (IOException missing) {
+            return null;                    // 没有校验清单：旧包/裁剪构建，跳过
+        }
+        if (expected.length() != 64) return null;
+        String actual;
+        try (InputStream in = getAssets().open(PAYLOAD_ZIP)) {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[256 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) md.update(buf, 0, n);
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : md.digest()) sb.append(String.format("%02x", b & 0xff));
+            actual = sb.toString();
+        } catch (Exception e) {
+            return "读取 APK 内的 payload.zip 失败：" + e.getMessage();
+        }
+        if (expected.equals(actual)) return null;
+        return "sha256 不匹配（清单 " + expected.substring(0, 12)
+                + "…，实际 " + actual.substring(0, 12) + "…）";
     }
 
     private void failExtract(String msg) {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  数据提取规则（API 31+ 生效；旧机型由 manifest 的 allowBackup="false" 兜底）。
+  cloud-backup 与 device-transfer 两段都刻意不配 include = 全量排除：
+  本应用的会话记录、API Key（dsh-home/.env）、带 token 的服务日志都在
+  应用私有目录，一律不进云备份、不进换机迁移。
+-->
+<data-extraction-rules>
+    <cloud-backup />
+    <device-transfer />
+</data-extraction-rules>

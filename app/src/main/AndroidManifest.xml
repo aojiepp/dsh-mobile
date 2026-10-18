@@ -11,13 +11,21 @@
     <!-- v2.5 收纳箱导出：targetSdk 28 走 legacy 存储模型，授权后可写 Download 目录 -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
+    <!-- 安全基线（真机安全审计整改）：
+         - debuggable 不写进真源：构建脚本按构建轨注入（debug 包加回、release 没有），
+           真源里留 true 会让 release 忘摘时直接带调试口出厂。
+         - allowBackup=false + dataExtractionRules：会话记录、API Key、带 token 的
+           服务日志都在私有目录，不进云备份、不进换机迁移；
+           API 31+ 由 rules 生效，旧机型由 allowBackup=false 兜底。
+         - usesCleartextTraffic=true 保持不变：这是用户明确决策——「连接电脑」模式
+           走局域网 http 直连，属接受风险项（本机内置服务模式全程回环，不受影响）。 -->
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/AppTheme"
-        android:allowBackup="true"
-        android:debuggable="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:hardwareAccelerated="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true">
