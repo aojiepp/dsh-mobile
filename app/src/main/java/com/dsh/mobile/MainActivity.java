@@ -9,7 +9,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.View;
-import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -38,9 +37,12 @@ public class MainActivity extends Activity {
     public static final String MODE_LOCAL = "local";
     public static final String MODE_PC = "pc";
     public static final String DEFAULT_URL = "http://127.0.0.1:3080";
-    public static final String VERSION = "2.10";
+    /** 版本名以构建期生成的 BuildInfo 为准（字段名 VERSION 不变，SettingsActivity 在引用） */
+    public static final String VERSION = BuildInfo.VERSION_NAME;
 
     private WebView web;
+    /** 原生能力桥（DshShell），onActivityResult 要转发给它 */
+    private DshBridge bridge;
     private ProgressBar progress;
     private View errorView;
     private TextView errorText;
@@ -99,90 +101,140 @@ public class MainActivity extends Activity {
         "}catch(e){}" +
         "})();";
 
-    /** 移动端布局补丁层：几何探测 + 定点修复 + MutationObserver 持续守护 */
+    /**
+     * 移动端布局补丁层（v2.11 性能重写）：几何探测 + 定点修复 + MutationObserver 守护。
+     * 相对 v2.10 的机制变化：
+     *  - 删除 setInterval(patch,2000) 定时轮询；
+     *  - observer 回调只排一帧 requestAnimationFrame（pending 去重）；帧内先 mo.disconnect()
+     *    → patch() → 再 mo.observe(...)，patch 自己的样式改写不回灌 observer（断自激回路）；
+     *    点击类副作用（侧栏 8 秒窗口自动收起）在恢复观察后执行，其 mutation 正常触发下一帧；
+     *  - patch() 读写分离：先批量读完 getComputedStyle/getBoundingClientRect/innerText，
+     *    再批量写 style，消除强制布局抖动；写前 setIfDiff 比对，值不变就不碰；
+     *  - querySelectorAll('body *') 全树扫描换成定向选择器集合
+     *    （'[style*="fixed"]' / 'img' / '[class*=_bubble]' / '[class*=sidebarCol]' / '[class*=ydkMvW_root]'）；
+     *  - 自证桩：window.__dshmPatchCount（patch 执行次数）、window.__dshmPatchMs（累计毫秒）。
+     */
     private static final String PATCH_JS =
         "(function(){" +
         "window.__dshmT0=window.__dshmT0||Date.now();" +
+        "window.__dshmPatchCount=window.__dshmPatchCount||0;" +
+        "window.__dshmPatchMs=window.__dshmPatchMs||0;" +
         "var vw=function(){return document.documentElement.clientWidth;};" +
         "var vh=function(){return document.documentElement.clientHeight;};" +
+        "function setIfDiff(el,p,v){if(el.style[p]!==v)el.style[p]=v;}" +
         "function patch(){" +
+        "var t0=(window.performance&&performance.now)?performance.now():Date.now();" +
+        "var after=null;" +
         "try{" +
         "var W=vw(),H=vh();" +
-        "var all=document.querySelectorAll('body *');" +
-        "for(var i=0;i<all.length;i++){" +
-        "var e=all[i];" +
+        "var i,e,b;" +
+        // ---- 阶段1：批量读（所有 getComputedStyle/getBoundingClientRect/innerText 在写之前完成）----
+        // A 底部输入栏 / B 顶部栏：候选＝内联 fixed 元素（几何判定条件与 v2.10 逐字一致）
+        "var abJobs=[];" +
+        "var cand=document.querySelectorAll('[style*=\"fixed\"]');" +
+        "for(i=0;i<cand.length;i++){" +
+        "e=cand[i];" +
         "if(getComputedStyle(e).position!=='fixed')continue;" +
-        "var b=e.getBoundingClientRect();" +
+        "b=e.getBoundingClientRect();" +
         "if(b.height>25&&b.height<130&&b.width>W*0.5&&(H-b.bottom)<40){" +
-        "e.style.transform='none';e.style.translate='none';" +
-        "e.style.top='auto';e.style.bottom='0px';" +
-        "e.style.left='56px';e.style.marginLeft='0px';e.style.width=(W-56)+'px';" +
+        "abJobs.push({e:e,k:1,w:(W-56)+'px'});" +
         "}else if(b.height>35&&b.top<=2&&b.width>=W-1){" +
-        "var off2=(b.left>=40?b.left:0);" +
-        "e.style.width=(W-off2)+'px';" +
-        "}" +
-        "}" +
+        "abJobs.push({e:e,k:2,w:(W-(b.left>=40?b.left:0))+'px'});" +
+        "}}" +
+        // C 图片溢出
+        "var imgJobs=[];" +
         "var imgs=document.querySelectorAll('img');" +
-        "for(var k=0;k<imgs.length;k++){" +
-        "var im=imgs[k],ib=im.getBoundingClientRect();" +
-        "if(ib.width>200&&ib.right>W+2){im.style.width=(W-ib.left)+'px';}" +
+        "for(i=0;i<imgs.length;i++){" +
+        "e=imgs[i];b=e.getBoundingClientRect();" +
+        "if(b.width>200&&b.right>W+2){imgJobs.push({e:e,w:(W-b.left)+'px'});}" +
         "}" +
+        // D 气泡
+        "var bubJobs=[];" +
         "var bub=document.querySelectorAll('[class*=_bubble]');" +
-        "for(var n=0;n<bub.length;n++){" +
-        "var be=bub[n];" +
-        "if(getComputedStyle(be).position!=='fixed')continue;" +
-        "var bb=be.getBoundingClientRect();" +
-        "if(bb.width>W-24){be.style.maxWidth=(W-24)+'px';}" +
-        "if(bb.bottom>H-80&&bb.height<60){be.style.bottom='76px';be.style.top='auto';}" +
+        "for(i=0;i<bub.length;i++){" +
+        "e=bub[i];" +
+        "if(getComputedStyle(e).position!=='fixed')continue;" +
+        "b=e.getBoundingClientRect();" +
+        "bubJobs.push({e:e,mw:b.width>W-24,pin:(b.bottom>H-80&&b.height<60)});" +
         "}" +
+        // E 侧栏（读）
         "var scCol=document.querySelector('[class*=sidebarCol]');" +
-        "var rootEl=scCol?scCol.querySelector('[class*=root]'):null;" +
-        "var expanded=!!(rootEl&&rootEl.className.indexOf('collapsed')<0);" +
+        "var expanded=false,tg=null;" +
+        "if(scCol){" +
+        "var rootEl=scCol.querySelector('[class*=root]');" +
+        "expanded=!!(rootEl&&rootEl.className.indexOf('collapsed')<0);" +
+        "if(expanded)tg=scCol.querySelector('[class*=toggle]');" +
+        "}" +
+        // F 详情抽屉（读）
+        "var dw=document.querySelector('[class*=ydkMvW_root]');" +
+        "var dwOn=false,dwOff=false;" +
+        "if(dw){" +
+        "var dtext=(dw.innerText||'').replace(/\\s+/g,'');" +
+        "var dwb=dw.getBoundingClientRect();" +
+        "if(dwb.width>50&&dtext.length>30){dwOn=true;}" +
+        "else if(dw.style.position==='fixed'){dwOff=true;}" +
+        "}" +
+        "var fabEl=document.getElementById('dsh-fab');" +
+        // ---- 阶段2：批量写（值相同由 setIfDiff 跳过）----
+        "for(i=0;i<abJobs.length;i++){" +
+        "var j=abJobs[i];" +
+        "if(j.k===1){" +
+        "setIfDiff(j.e,'transform','none');setIfDiff(j.e,'translate','none');" +
+        "setIfDiff(j.e,'top','auto');setIfDiff(j.e,'bottom','0px');" +
+        "setIfDiff(j.e,'left','56px');setIfDiff(j.e,'marginLeft','0px');" +
+        "setIfDiff(j.e,'width',j.w);" +
+        "}else{setIfDiff(j.e,'width',j.w);}" +
+        "}" +
+        "for(i=0;i<imgJobs.length;i++){setIfDiff(imgJobs[i].e,'width',imgJobs[i].w);}" +
+        "for(i=0;i<bubJobs.length;i++){" +
+        "var bj=bubJobs[i];" +
+        "if(bj.mw){setIfDiff(bj.e,'maxWidth',(W-24)+'px');}" +
+        "if(bj.pin){setIfDiff(bj.e,'bottom','76px');setIfDiff(bj.e,'top','auto');}" +
+        "}" +
+        "if(scCol){" +
         "if(!window.__dshmBackdrop){" +
         "var dl=document.createElement('div');" +
         "dl.id='dshm-backdrop';" +
         "dl.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;z-index:599;" +
         "background:rgba(0,0,0,.45);display:none;';" +
-        "dl.onclick=function(){" +
-        "var t=dl.__dshmToggle;" +
-        "if(t&&document.body.contains(t)){t.click();}" +
-        "};" +
+        "dl.onclick=function(){var t=dl.__dshmToggle;if(t&&document.body.contains(t)){t.click();}};" +
         "document.body.appendChild(dl);" +
         "window.__dshmBackdrop=dl;" +
         "}" +
         "var dl2=window.__dshmBackdrop;" +
         "if(expanded){" +
-        "scCol.style.position='fixed';scCol.style.top='0px';scCol.style.left='0px';" +
-        "scCol.style.bottom='0px';scCol.style.width='360px';scCol.style.maxWidth='100vw';" +
-        "scCol.style.height='100%';scCol.style.zIndex='600';" +
-        "scCol.style.overflowY='auto';scCol.style.overflowX='hidden';" +
-        "var tg=scCol.querySelector('[class*=toggle]');" +
-        "dl2.__dshmToggle=tg;dl2.style.display='block';" +
+        "setIfDiff(scCol,'position','fixed');setIfDiff(scCol,'top','0px');setIfDiff(scCol,'left','0px');" +
+        "setIfDiff(scCol,'bottom','0px');setIfDiff(scCol,'width','360px');setIfDiff(scCol,'maxWidth','100vw');" +
+        "setIfDiff(scCol,'height','100%');setIfDiff(scCol,'zIndex','600');" +
+        "setIfDiff(scCol,'overflowY','auto');setIfDiff(scCol,'overflowX','hidden');" +
+        "dl2.__dshmToggle=tg;setIfDiff(dl2,'display','block');" +
         "if(!window.__dshmClosed&&(Date.now()-window.__dshmT0)<8000){" +
-        "window.__dshmClosed=true;if(tg)tg.click();" +
+        "window.__dshmClosed=true;" +
+        "if(tg){after=(function(t){return function(){t.click();};})(tg);}" +
         "}" +
         "}else{" +
-        "scCol.style.position='';scCol.style.top='';scCol.style.left='';scCol.style.bottom='';" +
-        "scCol.style.width='';scCol.style.maxWidth='';scCol.style.height='';scCol.style.zIndex='';" +
-        "scCol.style.overflowY='';scCol.style.overflowX='';" +
-        "dl2.style.display='none';" +
-        "}" +
-        "var fabEl=document.getElementById('dsh-fab');" +
-        "if(fabEl){fabEl.style.display=expanded?'none':'';}" +
-        "var dw=document.querySelector('[class*=ydkMvW_root]');" +
+        "setIfDiff(scCol,'position','');setIfDiff(scCol,'top','');setIfDiff(scCol,'left','');setIfDiff(scCol,'bottom','');" +
+        "setIfDiff(scCol,'width','');setIfDiff(scCol,'maxWidth','');setIfDiff(scCol,'height','');setIfDiff(scCol,'zIndex','');" +
+        "setIfDiff(scCol,'overflowY','');setIfDiff(scCol,'overflowX','');" +
+        "setIfDiff(dl2,'display','none');" +
+        "}}" +
+        "if(fabEl){setIfDiff(fabEl,'display',expanded?'none':'');}" +
         "if(dw){" +
-        "var dtext=(dw.innerText||'').replace(/\\s+/g,'');" +
-        "if(dw.getBoundingClientRect().width>50&&dtext.length>30){" +
-        "dw.style.position='fixed';dw.style.top='0px';dw.style.bottom='0px';" +
-        "dw.style.left='0px';dw.style.right='auto';" +
-        "dw.style.maxWidth=W+'px';dw.style.zIndex='500';" +
-        "}else if(dw.style.position==='fixed'){" +
-        "dw.style.position='';dw.style.top='';dw.style.bottom='';" +
-        "dw.style.left='';dw.style.right='';dw.style.maxWidth='';dw.style.zIndex='';" +
-        "}" +
-        "}" +
+        "if(dwOn){" +
+        "setIfDiff(dw,'position','fixed');setIfDiff(dw,'top','0px');setIfDiff(dw,'bottom','0px');" +
+        "setIfDiff(dw,'left','0px');setIfDiff(dw,'right','auto');" +
+        "setIfDiff(dw,'maxWidth',W+'px');setIfDiff(dw,'zIndex','500');" +
+        "}else if(dwOff){" +
+        "setIfDiff(dw,'position','');setIfDiff(dw,'top','');setIfDiff(dw,'bottom','');" +
+        "setIfDiff(dw,'left','');setIfDiff(dw,'right','');setIfDiff(dw,'maxWidth','');setIfDiff(dw,'zIndex','');" +
+        "}}" +
         "}catch(err){}" +
+        "var t1=(window.performance&&performance.now)?performance.now():Date.now();" +
+        "window.__dshmPatchCount++;" +
+        "window.__dshmPatchMs+=(t1-t0);" +
+        "return after;" +
         "}" +
+        // 静态样式注入（与 v2.10 完全一致，未动）
         "var st=document.createElement('style');" +
         "st.textContent='body *{max-width:100%!important;}" +
         "img,video{height:auto!important;}" +
@@ -195,13 +247,26 @@ public class MainActivity extends Activity {
         "overflow-y:auto!important;overflow-x:hidden!important;" +
         "box-shadow:0 0 24px rgba(0,0,0,.45)!important;}}';" +
         "document.head.appendChild(st);" +
-        "patch();" +
-        "var t=null;" +
-        "var mo=new MutationObserver(function(){if(t)clearTimeout(t);t=setTimeout(patch,300);});" +
-        "mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class']});" +
-        "setInterval(patch,2000);" +
-        "window.addEventListener('resize',patch);" +
-        "if(window.visualViewport){window.visualViewport.addEventListener('resize',patch);}" +
+        // 调度层：observer 回调只排帧；帧内 disconnect→patch→observe→副作用，断自激回路
+        "var mo=null,pending=false;" +
+        "var OBS={childList:true,subtree:true,attributes:true,attributeFilter:['style','class']};" +
+        "function cycle(){" +
+        "if(mo)mo.disconnect();" +
+        "var after=null;" +
+        "try{after=patch();}catch(e){}" +
+        "if(mo){try{mo.observe(document.body,OBS);}catch(e){}}" +
+        "if(after){try{after();}catch(e){}}" +
+        "}" +
+        "function schedule(){" +
+        "if(pending)return;" +
+        "pending=true;" +
+        "requestAnimationFrame(function(){pending=false;cycle();});" +
+        "}" +
+        "cycle();" +
+        "mo=new MutationObserver(schedule);" +
+        "mo.observe(document.body,OBS);" +
+        "window.addEventListener('resize',schedule);" +
+        "if(window.visualViewport){window.visualViewport.addEventListener('resize',schedule);}" +
         "})();";
 
     /** 移动版 viewport 与触摸体验微调 */
@@ -557,12 +622,24 @@ public class MainActivity extends Activity {
         return url;
     }
 
-    /** 0.2.0 起 dsh web 需要启动 token：扫描服务日志里的 "dsh web: <url>" 行，
-     *  取最后一条（node 重启后日志截断重写，token 随进程更新） */
+    /** 0.2.0 起 dsh web 需要启动 token。快路径：服务端直接把带 token 的 URL 写入
+     *  prefs（launch_url + launch_url_ts），时间戳不早于本次调用起点（= 本轮启动的
+     *  新鲜值）就直接返回；否则走服务日志扫描兜底："dsh web: <url>" 行取最后一条
+     *  （node 重启后日志截断重写，token 随进程更新） */
     private String readLaunchUrl(long timeoutMs) {
+        final long callStart = System.currentTimeMillis();
         java.io.File log = new java.io.File(getFilesDir(), "dsh-server.log");
-        long deadline = System.currentTimeMillis() + timeoutMs;
+        long deadline = callStart + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
+            String pu = prefs.getString("launch_url", null);
+            if (pu != null && !pu.isEmpty()) {
+                long pts = 0;
+                try {
+                    pts = Long.parseLong(prefs.getString("launch_url_ts", "0"));
+                } catch (NumberFormatException ignored) {
+                }
+                if (pts >= callStart) return pu;
+            }
             try {
                 if (log.exists()) {
                     java.io.BufferedReader r =
@@ -612,9 +689,14 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 29) {
             s.setForceDark(WebSettings.FORCE_DARK_AUTO);
         }
-        WebView.setWebContentsDebuggingEnabled(true);
+        WebView.setWebContentsDebuggingEnabled(BuildInfo.DEBUG);
 
-        web.addJavascriptInterface(new ShellBridge(), "DshShell");
+        // 原生能力桥：页面侧仍叫 DshShell（FAB_JS 调 DshShell.openMenu()），
+        // 除菜单外还提供 openUrl/shareText/saveToDownloads/pickFile
+        bridge = new DshBridge(this, web, new DshBridge.MenuHandler() {
+            @Override public void show() { showControlDialog(); }
+        });
+        web.addJavascriptInterface(bridge, "DshShell");
 
         web.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -733,13 +815,13 @@ public class MainActivity extends Activity {
                 });
     }
 
-    /** JS 桥：页面悬浮按钮 -> 原生控制菜单 */    private class ShellBridge {
-        @JavascriptInterface
-        public void openMenu() {
-            runOnUiThread(new Runnable() {
-                @Override public void run() { showControlDialog(); }
-            });
+    /** SAF 等系统页结果转发给桥（返回 true = 该 requestCode 归桥处理，不走 super） */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (bridge != null && bridge.onActivityResult(requestCode, resultCode, data)) {
+            return;
         }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     private void showControlDialog() {
