@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- v2.11 收纳箱重做（多选 / 打包 / 导入 / 分享）——新增文案集中放这里，strings.xml 不动 -->
+
+    <string name="artifacts_hint_multi">智能体产物与对话记录都在应用私有目录里，普通文件管理器看不到。\n勾选文件后可：提取（目录自动打包成 zip）、删除、分享给其它 App。\n「全部导出」把整个工作区打成一个 zip；「导入」把手机里的文件放进 files/workspace/imported/。\n导出落点：Download/dsh-export/</string>
+
+    <string name="btn_select_all">全选</string>
+    <string name="btn_select_none">清空</string>
+    <string name="btn_extract_sel">提取所选</string>
+    <string name="btn_delete_sel">删除所选</string>
+    <string name="btn_export_ws">全部导出</string>
+    <string name="btn_import">导入</string>
+    <string name="btn_share_sel">分享所选</string>
+    <string name="btn_zip">打包</string>
+
+    <string name="artifacts_stat_sel">共 %1$d 个文件 · 已选 %2$d</string>
+    <string name="artifacts_depth_note">· 目录层级已到 6 层上限，更深的内容未列出</string>
+    <string name="artifacts_trunc_note">· 文件太多，仅显示前 %1$d 个（「全部导出」仍包含全部文件）</string>
+
+    <string name="toast_none_sel">请先勾选要操作的文件</string>
+    <string name="toast_busy">上一个操作还在进行，请稍候</string>
+
+    <string name="extract_progress">正在导出…</string>
+    <string name="extract_big_title">文件较大</string>
+    <string name="extract_big_msg">「%1$s」有 %2$s，提取需要一些时间，继续吗？</string>
+    <string name="dlg_continue">继续</string>
+    <string name="extract_zip_ok">已打包 %1$d 个文件：Download/dsh-export/%2$s</string>
+
+    <string name="export_progress">正在打包工作区…</string>
+    <string name="export_ws_ok">已导出工作区：Download/dsh-export/%1$s</string>
+    <string name="export_none">没有可导出的文件</string>
+    <string name="zip_skipped">（%1$d 个文件读不到，已跳过）</string>
+
+    <string name="op_fail">操作失败（%1$s）</string>
+    <string name="delete_sel_msg">删除后无法恢复，确定删除选中的 %1$d 个文件？</string>
+    <string name="delete_sel_ok">已删除 %1$d 个文件</string>
+
+    <string name="import_progress">正在导入…</string>
+    <string name="import_done">已导入 %1$d 个文件到 files/%2$s</string>
+    <string name="import_none">没有选择文件</string>
+    <string name="import_pick_fail">无法打开文件选择器（%1$s）</string>
+
+    <string name="share_progress">正在准备分享…</string>
+    <string name="share_choose">分享到</string>
+    <string name="share_limit">一次最多分享 %1$d 个文件，请分批操作</string>
+    <string name="share_none_uri">分享失败：无法创建可读副本</string>
+    <string name="save_ok">已保存到 Download/dsh-export/%1$s</string>
+
+    <string name="url_blocked">已拦截：只允许打开 http/https 链接</string>
+</resources>

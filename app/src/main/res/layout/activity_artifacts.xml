@@ -1,46 +1,160 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- v2.11 收纳箱：顶部固定「统计 + 操作栏」，下方可滚动文件列表（多选） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:scrollbars="none">
+    android:orientation="vertical"
+    android:paddingLeft="16dp"
+    android:paddingRight="16dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
 
+    <!-- 说明卡片 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:background="@drawable/bg_card"
+        android:padding="14dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_card"
-            android:padding="14dp">
+            android:lineSpacingExtra="2dp"
+            android:text="@string/artifacts_hint_multi"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/artifacts_hint"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:lineSpacingExtra="2dp" />
-        </LinearLayout>
+    <!-- 顶部统计行（文件数 / 已选数） -->
+    <TextView
+        android:id="@+id/artifacts_stat"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textColor="@color/text_primary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- 操作栏：全选 / 清空 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_select_all"
+            style="@style/DshButtonSecondary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="6dp"
+            android:layout_weight="1"
+            android:text="@string/btn_select_all"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_select_none"
+            style="@style/DshButtonSecondary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:layout_weight="1"
+            android:text="@string/btn_select_none"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 操作栏：提取所选 / 删除所选 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_extract_sel"
+            style="@style/DshButtonPrimary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="6dp"
+            android:layout_weight="1"
+            android:text="@string/btn_extract_sel"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_delete_sel"
+            style="@style/DshButtonDanger"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:layout_weight="1"
+            android:text="@string/btn_delete_sel"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 操作栏：全部导出 / 分享所选 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_export_ws"
+            style="@style/DshButtonSecondary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="6dp"
+            android:layout_weight="1"
+            android:text="@string/btn_export_ws"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_share_sel"
+            style="@style/DshButtonSecondary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:layout_weight="1"
+            android:text="@string/btn_share_sel"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 导入（SAF 多选） -->
+    <Button
+        android:id="@+id/btn_import"
+        style="@style/DshButtonSecondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/btn_import"
+        android:textSize="13sp" />
+
+    <!-- 进行中提示 -->
+    <TextView
+        android:id="@+id/artifacts_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/brand_primary"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <!-- 文件列表 -->
+    <ScrollView
+        android:id="@+id/artifacts_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="10dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
             android:id="@+id/artifacts_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:orientation="vertical" />
-
-        <TextView
-            android:id="@+id/artifacts_stat"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="20dp"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
-    </LinearLayout>
-</ScrollView>
+            android:orientation="vertical"
+            android:paddingBottom="8dp" />
+    </ScrollView>
+</LinearLayout>
