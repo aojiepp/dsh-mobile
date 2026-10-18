@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- v2.12 设置页「诊断」区块 + 连接电脑明文传输提醒（新文案集中放这里，strings.xml 不动） -->
+
+    <string name="diag_title">诊断</string>
+    <string name="diag_version">版本 %1$s（versionCode %2$d）</string>
+    <string name="diag_payload_sha">运行时校验和 %1$s</string>
+    <string name="diag_build_time">构建时间 %1$s</string>
+    <string name="diag_debug_build">调试构建（debuggable）</string>
+
+    <string name="diag_port_label">端口 3080：%1$s</string>
+    <string name="diag_port_open">监听中</string>
+    <string name="diag_port_closed">未监听</string>
+
+    <string name="diag_log_label">日志关键字（最近 20 行里的 plugin / error）：</string>
+    <string name="diag_log_none">无</string>
+    <string name="diag_log_fail">读取日志失败：%1$s</string>
+
+    <string name="diag_url_insecure">⚠ 非回环地址用 http 会明文传输：同一 Wi-Fi 下的其他人可能看到会话内容与凭据。建议改用 USB 隧道（http://127.0.0.1:3080 + adb reverse），或给电脑端启用 https。</string>
+
+    <!-- DshServerService 解压前校验用的失败文案（集成 snippet 引用；由 lead 加进服务代码） -->
+    <string name="extract_err_checksum">payload 校验失败，请重试（%1$s）</string>
+</resources>

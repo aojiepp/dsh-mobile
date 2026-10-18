@@ -3,8 +3,11 @@ package com.dsh.mobile;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -24,10 +27,12 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 import javax.net.ssl.SSLException;
 
-/** 设置页：运行模式（本机内置服务 / PC 服务器）、连接检测、API Key、服务状态与重启 */
+/** 设置页：运行模式（本机内置服务 / PC 服务器）、连接检测、API Key、服务状态与重启、诊断 */
 public class SettingsActivity extends Activity {
 
     private RadioGroup modeGroup;
@@ -44,9 +49,24 @@ public class SettingsActivity extends Activity {
     private Button btnReextract;
     private Button btnTest;
     private SharedPreferences prefs;
+    /** v2.12 诊断区块 */
+    private TextView diagInfo;
+    private TextView diagPort;
+    private TextView diagLog;
+    /** 连接电脑：非回环 http 明文传输提醒（默认隐藏，TextWatcher 切换） */
+    private TextView urlWarn;
     /** v2.9：状态每秒刷新（解压百分比/停滞判断需要实时值，不能只在 onResume 刷一次） */
     private final android.os.Handler statusHandler = new android.os.Handler();
     private Runnable statusTask;
+
+    /** 日志/地址里的凭据打码：([?&](token|api_key|key)=)[^&\s]+ → $1*** */
+    private static final Pattern TOKEN_MASK =
+            Pattern.compile("([?&](token|api_key|key)=)[^&\\s]+");
+
+    private static String maskTokens(String text) {
+        if (text == null || text.isEmpty()) return "";
+        return TOKEN_MASK.matcher(text).replaceAll("$1***");
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +87,10 @@ public class SettingsActivity extends Activity {
         btnRestart = findViewById(R.id.btn_restart);
         btnReextract = findViewById(R.id.btn_reextract);
         btnTest = findViewById(R.id.btn_test);
+        diagInfo = findViewById(R.id.diag_info);
+        diagPort = findViewById(R.id.diag_port);
+        diagLog = findViewById(R.id.diag_log);
+        urlWarn = findViewById(R.id.url_warn);
 
         boolean local = MainActivity.MODE_LOCAL.equals(
                 prefs.getString(MainActivity.KEY_MODE, MainActivity.MODE_LOCAL));
@@ -113,6 +137,15 @@ public class SettingsActivity extends Activity {
 
         TextView version = findViewById(R.id.version);
         version.setText(getString(R.string.app_name) + " v" + MainActivity.VERSION);
+
+        // v2.12 诊断：版本/校验和/构建时间 + 日志关键字；明文传输提醒跟着输入框走
+        initDiagnostics();
+        urlInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(Editable s) { updateUrlWarning(); }
+        });
+        updateUrlWarning();
     }
 
     @Override
@@ -153,6 +186,12 @@ public class SettingsActivity extends Activity {
     }
 
     private void refreshStatus() {
+        // 诊断：端口 3080 实时状态（每秒一次，和下面的服务状态共用一次探测）
+        boolean portOpen = DshServerService.isPortOpen(3080, 300);
+        if (diagPort != null) {
+            diagPort.setText(getString(R.string.diag_port_label,
+                    getString(portOpen ? R.string.diag_port_open : R.string.diag_port_closed)));
+        }
         if (!localChecked()) {
             statusText.setText(R.string.status_pc_note);
             return;
@@ -188,7 +227,7 @@ public class SettingsActivity extends Activity {
             statusText.setText(R.string.status_running);
         } else if (st.startsWith(DshServerService.STATE_EXITED)) {
             // 陈旧状态（上一轮退出）不再吓人：端口在监听就按运行中处理
-            if (DshServerService.isPortOpen(3080, 300)) {
+            if (portOpen) {
                 statusText.setText(R.string.status_running);
             } else {
                 statusText.setText(getString(R.string.status_exited) + " (" + st + ")");
@@ -203,6 +242,94 @@ public class SettingsActivity extends Activity {
         } else {
             statusText.setText(getString(R.string.status_starting));
         }
+    }
+
+    // ---------- v2.12 诊断区块 ----------
+
+    /** 一次性填充：versionName(versionCode) + BuildInfo 的 payload 校验和/构建时间 + 日志关键字 */
+    private void initDiagnostics() {
+        String verName = MainActivity.VERSION;
+        int verCode = BuildInfo.VERSION_CODE;
+        try {
+            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            if (pi.versionName != null && !pi.versionName.isEmpty()) verName = pi.versionName;
+            verCode = pi.versionCode;
+        } catch (Exception ignored) {
+            // 包信息读不到就退回 BuildInfo 的编译期常量
+        }
+        String sha = BuildInfo.PAYLOAD_SHA256 == null ? "" : BuildInfo.PAYLOAD_SHA256;
+        if (sha.length() > 12) sha = sha.substring(0, 12) + "…";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(getString(R.string.diag_version, verName, verCode));
+        sb.append('\n').append(getString(R.string.diag_payload_sha, sha));
+        sb.append('\n').append(getString(R.string.diag_build_time, BuildInfo.BUILD_TIME));
+        if (BuildInfo.DEBUG) sb.append('\n').append(getString(R.string.diag_debug_build));
+        diagInfo.setText(maskTokens(sb.toString()));
+        diagLog.setText(readLogKeywords());
+    }
+
+    /** 读 dsh-server.log 尾部，取最后 20 行里含 plugin / error 的行（没有则「无」） */
+    private String readLogKeywords() {
+        File log = new File(getFilesDir(), "dsh-server.log");
+        if (!log.exists() || log.length() == 0) return getString(R.string.diag_log_none);
+        try {
+            long len = log.length();
+            long start = Math.max(0, len - 16384);
+            byte[] buf = new byte[(int) (len - start)];
+            try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(log, "r")) {
+                raf.seek(start);
+                raf.readFully(buf);
+            }
+            String[] lines = new String(buf, StandardCharsets.UTF_8).split("\n");
+            int from = Math.max(0, lines.length - 20);
+            StringBuilder sb = new StringBuilder();
+            for (int i = from; i < lines.length; i++) {
+                String line = lines[i].trim();
+                if (line.isEmpty()) continue;
+                String low = line.toLowerCase(Locale.US);
+                if (low.contains("plugin") || low.contains("error")) {
+                    if (sb.length() > 0) sb.append('\n');
+                    sb.append(line);
+                }
+            }
+            return sb.length() == 0
+                    ? getString(R.string.diag_log_none) : maskTokens(sb.toString());
+        } catch (Exception e) {
+            return getString(R.string.diag_log_fail, String.valueOf(e.getMessage()));
+        }
+    }
+
+    /** 「连接电脑」地址栏下方的明文传输提醒：仅当输入是「非回环 http://」时可见 */
+    private void updateUrlWarning() {
+        if (urlWarn == null) return;
+        urlWarn.setVisibility(isPlainHttpNonLoopback(urlInput.getText().toString())
+                ? View.VISIBLE : View.GONE);
+    }
+
+    /** 非回环地址 + http 明文 = 同一网络里可被嗅探（https / 回环地址不提醒） */
+    static boolean isPlainHttpNonLoopback(String raw) {
+        String url = normalizeUrl(raw).toLowerCase(Locale.US);
+        if (!url.startsWith("http://")) return false;
+        String rest = url.substring(7);
+        int cut = rest.length();
+        for (int i = 0; i < rest.length(); i++) {
+            char c = rest.charAt(i);
+            if (c == '/' || c == '?' || c == '#') { cut = i; break; }
+        }
+        String host = rest.substring(0, cut);
+        int at = host.lastIndexOf('@');
+        if (at >= 0) host = host.substring(at + 1);
+        if (host.startsWith("[")) {
+            int close = host.indexOf(']');
+            if (close >= 0) host = host.substring(0, close + 1);
+        } else {
+            int colon = host.indexOf(':');
+            if (colon >= 0) host = host.substring(0, colon);
+        }
+        return !(host.equals("127.0.0.1") || host.equals("localhost")
+                || host.equals("[::1]") || host.equals("::1")
+                || host.equals("0:0:0:0:0:0:0:1"));
     }
 
     /** 二次确认后清运行时重解压（会话/凭据在 dsh-home，不动） */
@@ -228,7 +355,8 @@ public class SettingsActivity extends Activity {
             text = "读取日志失败：" + e.getMessage();
         }
         TextView tv = new TextView(this);
-        tv.setText(text);
+        // v2.12：日志里可能带 token/api_key，显示前统一打码
+        tv.setText(maskTokens(text));
         tv.setTextSize(11);
         tv.setTextIsSelectable(true);
         tv.setPadding(32, 24, 32, 24);
@@ -387,8 +515,11 @@ public class SettingsActivity extends Activity {
             try (FileOutputStream fos = new FileOutputStream(env)) {
                 fos.write(content.getBytes(StandardCharsets.UTF_8));
             }
-            // DSH 对凭据类文件要求仅属主可读写（mode 600）
+            // DSH 对凭据类文件要求仅属主可读写（mode 600）：
+            // 必须先全关再开属主位（setReadable(true,true) 单独用清不掉 group/other 已有读位）
+            env.setReadable(false, false);
             env.setReadable(true, true);
+            env.setWritable(false, false);
             env.setWritable(true, true);
             env.setExecutable(false, false);
         } catch (Exception e) {

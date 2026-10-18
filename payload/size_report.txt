@@ -1,0 +1,64 @@
+# dsh-mobile 裁剪树体积报告
+# 生成: 2026-10-18 17:09:51
+# 树: C:\Users\coaoj\AppData\Local\Temp\dshm-trim\app
+# 总文件数: 13379   总大小: 156.4 MB
+
+## 定点清理（先 grep 引用证据，0 引用才删）
+# 判定口径：命中的是 import/require、动态 import 地址或资源清单 → 保留；纯字符串提及也算命中（宁可少删）。
+- 保留 node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/entrypoints/lighthouse_worker/lighthouse_worker.js (8.78 MB) — 被 2 个文件引用: node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/resource-manifest.json(x3), node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/lighthouse-B1qM_zXC.js(x3) — 用途: Chrome DevTools 的 Lighthouse worker（只有跑审计面板时才会加载）
+- 删除 node_modules/@mixmark-io/domino/.yarn/plugins/@yarnpkg/plugin-version.cjs (1.02 MB) — 全树扫描 13287 个文本文件，0 处引用（检索词: plugin-version.cjs, @yarnpkg/plugin-version） — 用途: domino 包里误带出来的 Yarn 发布插件（与运行时无关）
+- 删除 node_modules/.package-lock.json (0.37 MB) — 全树扫描 13286 个文本文件，0 处引用（检索词: .package-lock.json） — 用途: npm 安装元数据，运行时无人读取
+- 保留 package-lock.json (0.42 MB) — 被 3 个文件引用: node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/common-Bs7hSOUj.js(x1), node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/index-CN7NIWNw.js(x1), node_modules/protobufjs/package.json(x1) — 用途: npm 安装元数据，运行时无人读取
+- 删除 类型声明 *.d.ts/*.d.cts/*.d.mts 共 2309 个 (9.82 MB) — 证据: node 运行时不加载 .ts 声明文件，仅 package.json 的 "types" 字段引用（tsc/IDE 用）
+
+## Top 50 大文件（相对路径 + MB）
+ 1. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/entrypoints/lighthouse_worker/lighthouse_worker.js    8.78 MB
+ 2. node_modules/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/lib/client.pdf.js         6.78 MB
+ 3. node_modules/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/lib/client.excel.js       6.73 MB
+ 4. node_modules/@vscode/ripgrep-linux-arm64/bin/rg                                           4.64 MB
+ 5. node_modules/@vscode/ripgrep-android-arm64/bin/rg                                         4.64 MB
+ 6. node_modules/@deepseek-ai/dsh-client-ui-settings-account/lib/client.js                    3.26 MB
+ 7. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/legacy-dM_vujv7.js    1.62 MB
+ 8. node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js                                   1.03 MB
+ 9. node_modules/@google/genai/dist/node/index.cjs                                            1.01 MB
+10. node_modules/@google/genai/dist/node/index.mjs                                            1.01 MB
+11. node_modules/@google/genai/dist/index.cjs                                                 0.99 MB
+12. node_modules/@google/genai/dist/web/index.mjs                                             0.99 MB
+13. node_modules/@google/genai/dist/index.mjs                                                 0.99 MB
+14. node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/index-CN7NIWNw.js                  0.90 MB
+15. node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/langs/cpp-DddhVWhK.js              0.76 MB
+16. node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/client.js                        0.74 MB
+17. node_modules/brotli/dec/dictionary-data.js                                                0.72 MB
+18. node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/vendor-DcuzkuQH.js                 0.71 MB
+19. node_modules/@opentelemetry/semantic-conventions/build/src/experimental_attributes.js     0.70 MB
+20. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/protocol_client-L4-X1Qrb.js    0.70 MB
+21. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/timeline-BOm6TluW.js    0.66 MB
+22. node_modules/@deepseek-ai/dsh-client-ui-sidebar-terminal/lib/client.terminal.js           0.66 MB
+23. node_modules/@opentelemetry/semantic-conventions/build/esnext/experimental_attributes.js    0.63 MB
+24. node_modules/@opentelemetry/semantic-conventions/build/esm/experimental_attributes.js     0.63 MB
+25. node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/api-catalog.js                        0.63 MB
+26. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/common-Bs7hSOUj.js    0.62 MB
+27. node_modules/@deepseek-ai/dsh-client-ui-plugin-manager/lib/client.js                      0.60 MB
+28. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/codemirror-CENmPHF2.js    0.59 MB
+29. node_modules/@deepseek-ai/dsh-client-ui-chat/lib/client.js                                0.57 MB
+30. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/application-DG2H8fsc.js    0.56 MB
+31. node_modules/fontkit/dist/main.cjs                                                        0.54 MB
+32. node_modules/fontkit/dist/browser.cjs                                                     0.54 MB
+33. node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/worker.cjs                    0.54 MB
+34. node_modules/fontkit/dist/module.mjs                                                      0.52 MB
+35. node_modules/fontkit/dist/browser-module.mjs                                              0.52 MB
+36. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/elements-CiWscFTo.js    0.47 MB
+37. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/lighthouse-B1qM_zXC.js    0.45 MB
+38. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/network-CzcqMGwP.js    0.42 MB
+39. package-lock.json                                                                         0.42 MB
+40. node_modules/@agentclientprotocol/sdk/schema/v2/schema.unstable.json                      0.40 MB
+41. node_modules/brotli/build/encode.js                                                       0.39 MB
+42. node_modules/openai/src/resources/beta/responses/responses.ts                             0.39 MB
+43. node_modules/@deepseek-ai/dsh-cordis-client-runner/lib/client.js                          0.38 MB
+44. node_modules/@deepseek-ai/dsh-client-ui-trajectory/lib/client.js                          0.38 MB
+45. node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/langs/graphql-VhKNCVsv.js          0.35 MB
+46. node_modules/@agentclientprotocol/sdk/schema/schema.json                                  0.35 MB
+47. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/puppeteer-xGpmPP-i.js    0.35 MB
+48. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/snackbars-Dq3yf1tP.js    0.35 MB
+49. node_modules/@deepseek-ai/dsh-api-session-controller/lib/typert.host.js                   0.35 MB
+50. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/sources-RXc96T-9.js    0.35 MB

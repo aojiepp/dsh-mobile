@@ -14,6 +14,7 @@ tools/release.keystore
 #   payload/debs/         下载的 .deb 包
 #   payload/payload.zip   打包产物（复制到 app/src/main/assets/ 参与构建）
 payload/payload.zip
+payload/payload.sha256
 payload/termux/
 payload/debs/
 payload/nodejs.deb
@@ -21,6 +22,7 @@ payload/Packages*
 payload/node
 
 app/src/main/assets/payload.zip
+app/src/main/assets/payload.sha256
 
 # Python 缓存
 __pycache__/
