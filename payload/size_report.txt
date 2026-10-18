@@ -1,15 +1,15 @@
 # dsh-mobile 裁剪树体积报告
-# 生成: 2026-10-18 17:09:51
+# 生成: 2026-10-18 17:23:44
 # 树: C:\Users\coaoj\AppData\Local\Temp\dshm-trim\app
-# 总文件数: 13379   总大小: 156.4 MB
+# 总文件数: 27491   总大小: 261.3 MB
 
 ## 定点清理（先 grep 引用证据，0 引用才删）
 # 判定口径：命中的是 import/require、动态 import 地址或资源清单 → 保留；纯字符串提及也算命中（宁可少删）。
 - 保留 node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/entrypoints/lighthouse_worker/lighthouse_worker.js (8.78 MB) — 被 2 个文件引用: node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/resource-manifest.json(x3), node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/lighthouse-B1qM_zXC.js(x3) — 用途: Chrome DevTools 的 Lighthouse worker（只有跑审计面板时才会加载）
-- 删除 node_modules/@mixmark-io/domino/.yarn/plugins/@yarnpkg/plugin-version.cjs (1.02 MB) — 全树扫描 13287 个文本文件，0 处引用（检索词: plugin-version.cjs, @yarnpkg/plugin-version） — 用途: domino 包里误带出来的 Yarn 发布插件（与运行时无关）
-- 删除 node_modules/.package-lock.json (0.37 MB) — 全树扫描 13286 个文本文件，0 处引用（检索词: .package-lock.json） — 用途: npm 安装元数据，运行时无人读取
+- 删除 node_modules/@mixmark-io/domino/.yarn/plugins/@yarnpkg/plugin-version.cjs (1.02 MB) — 全树扫描 27399 个文本文件，0 处引用（检索词: plugin-version.cjs, @yarnpkg/plugin-version） — 用途: domino 包里误带出来的 Yarn 发布插件（与运行时无关）
+- 删除 node_modules/.package-lock.json (0.37 MB) — 全树扫描 27398 个文本文件，0 处引用（检索词: .package-lock.json） — 用途: npm 安装元数据，运行时无人读取
 - 保留 package-lock.json (0.42 MB) — 被 3 个文件引用: node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/common-Bs7hSOUj.js(x1), node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/index-CN7NIWNw.js(x1), node_modules/protobufjs/package.json(x1) — 用途: npm 安装元数据，运行时无人读取
-- 删除 类型声明 *.d.ts/*.d.cts/*.d.mts 共 2309 个 (9.82 MB) — 证据: node 运行时不加载 .ts 声明文件，仅 package.json 的 "types" 字段引用（tsc/IDE 用）
+- 删除 类型声明 *.d.ts/*.d.cts/*.d.mts 共 6710 个 (23.07 MB) — 证据: node 运行时不加载 .ts 声明文件，仅 package.json 的 "types" 字段引用（tsc/IDE 用）
 
 ## Top 50 大文件（相对路径 + MB）
  1. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/entrypoints/lighthouse_worker/lighthouse_worker.js    8.78 MB
@@ -49,8 +49,8 @@
 35. node_modules/fontkit/dist/browser-module.mjs                                              0.52 MB
 36. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/elements-CiWscFTo.js    0.47 MB
 37. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/lighthouse-B1qM_zXC.js    0.45 MB
-38. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/network-CzcqMGwP.js    0.42 MB
-39. package-lock.json                                                                         0.42 MB
+38. package-lock.json                                                                         0.42 MB
+39. node_modules/@deepseek-ai/dsh-experimental-inspector/lib/devtools/chunks/network-CzcqMGwP.js    0.42 MB
 40. node_modules/@agentclientprotocol/sdk/schema/v2/schema.unstable.json                      0.40 MB
 41. node_modules/brotli/build/encode.js                                                       0.39 MB
 42. node_modules/openai/src/resources/beta/responses/responses.ts                             0.39 MB

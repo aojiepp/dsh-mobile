@@ -2,6 +2,36 @@
 
 Android 上独立跑完整 DSH 的壳工程。构建链、payload 管线、真机踩坑都记在这里。
 
+## v2.11（vc29，2026-10-18）：安全基线 + 开发工具链 + 收纳箱重做
+
+- **构建**：`tools\build_manual.py [--release]`（release 剥离 debuggable、BuildInfo.DEBUG=false；debug 轨构建时注入回）。
+  签名口令移出源码 → `tools\signing.properties`（gitignored）或环境变量 `DSHM_STORE_PASS/DSHM_KEY_PASS`。
+  `BuildInfo.java`（DEBUG/VERSION_CODE/VERSION_NAME/PAYLOAD_SHA256/BUILD_TIME）每次构建由脚本生成。
+  并行开发用 `tools\compile_check.py --name <ws>`（独立临时目录，不碰共享 build）；**build_manual.py 禁止并行**。
+  真机验收：`tools\verify_release.ps1 -Phase install|security|logs|perf`。
+- **安全（P0/P1 已修）**：manifest 不再有 debuggable；`allowBackup=false` + `data_extraction_rules.xml`；
+  DshServerService 启动时日志轮转（旧日志打码 token）、log-watcher 把带 token 的启动 URL 写进 prefs
+  （`launch_url`/`launch_url_ts`，MainActivity.readLaunchUrl 是 prefs 优先、日志兜底）、删 legacy `manual.log`、
+  日志/.env 刷 600（先全关再开属主位，单独 setReadable(true,true) 清不掉 group/other）。
+  **cleartext 保持 true 是用户明确决策**（「连接电脑」模式局域网 http 直连在用），设置页对非回环 http 有红字警告。
+- **工具链进 payload**：git 2.56 / curl 8.23 / openssh 10.6 / npm 11.21 / pnpm 10.34.7 / tar / less + DT_NEEDED 闭包
+  （清单与版本在 `payload/TOOLCHAIN.md`）。`extract_termux.py` 支持整子树映射 + 符号链接物化 wrapper；
+  `patch_runpath.py` 扩到 libexec/**。`ToolchainEnv.apply()` 在服务 spawn 前注入 PATH/GIT_EXEC_PATH/GIT_TEMPLATE_DIR/
+  GIT_SSL_CAINFO/npm_config_prefix/PNPM_HOME + 首启写 files/.gitconfig。解压后 setExecutable 全量遍历 bin/+libexec/。
+  pnpm 钉 10.x（12.x 改 .mjs 布局）；Termux ca-certificates 只有 cert.pem，extract 会复制一份 ca-certificates.crt 给 git。
+- **收纳箱**：递归两棵根（workspace / dsh-home/sessions，深度≤6，渲染上限 600 行）、多选、目录打 zip 提取、
+  SAF 导入到 files/workspace/imported/<ts>/、MediaStore 分享（无 AndroidX 不用 FileProvider）。
+  **DshBridge**（JS 名仍 DshShell）：openUrl/shareText/saveToDownloads/pickFile，全部过 origin 白名单
+  （回环或 server_url 同 host），saveToDownloads 校验 canonical 必须在 files/ 内。
+- **性能**：PATCH_JS 重写——删 setInterval(2000)、observer 回调只排 rAF（帧内 disconnect→patch→observe 断自激）、
+  读写分离 + setIfDiff、`body *` 全树扫描改 5 个定向选择器。自证桩 `__dshmPatchCount/__dshmPatchMs`。
+- **瘦身**：删 .d.ts/.d.cts/.d.mts（2309 个/9.82MB）+ yarn 误打包文件 + .package-lock；**lighthouse_worker.js 不能删**
+  （被 devtools chunks 引用，删了 Lighthouse 面板挂）。prepare 末尾自动写 `payload/size_report.txt`（top-50）。
+- **payload 校验**：build_payload.py 生成 `payload.sha256`，两个文件都要拷进 assets/；解压前校验，不匹配 failExtract。
+- **体积账**：zip 82.9→101.1MB（工具链 +18MB、瘦身 -2.4MB）；文件数 15,716→16,369（工具链 +3,009、瘦身 -2,311、dedupe 若干）。
+  可选再省 ~15MB raw：git-core 里只留仓库必需二进制（daemon/http-backend/imap-send 等可删），本期未裁。
+- **targetSdk 28 不动**（SELinux exec 限制；升 35 需 linker 直调方案，第二期评估）。
+
 ## 图标（SVG 真源）
 
 - 真源：`design/ic_launcher.svg`（蓝色大肥鱼 / 鲸鱼娘 Q 版头像，简笔扁平）。
