@@ -59,6 +59,9 @@ public final class ToolchainEnv {
                 new File(prefix, "libexec/git-core").getAbsolutePath());
         env.put("GIT_TEMPLATE_DIR",
                 new File(prefix, "share/git-core/templates").getAbsolutePath());
+        // Termux git 还会读编死的系统级 gitconfig（/data/data/com.termux/.../etc/gitconfig），
+        // 在本应用沙箱里不可读且一读就 fatal——直接禁用系统级 gitconfig（真机实测踩到）。
+        env.put("GIT_CONFIG_NOSYSTEM", "1");
 
         // 4. 包管理器可写目录：termux 前缀在 APK 私有目录里只读语义，
         //    全局安装落到 files/ 下，避免写 prefix

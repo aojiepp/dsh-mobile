@@ -36,16 +36,20 @@ function Tap-ById([string]$id) {
 
 function Phase-Install {
     Write-Host "== install: $Apk =="
-    & $ADB install -r $Apk
-    Start-Sleep 2
-    # vivo 安全守护：勾选「已了解风险」→ 继续安装（坐标从 uiautomator dump 取，不硬编码）
-    for ($i = 0; $i -lt 6; $i++) {
-        $tapped = Tap-ById "com.android.packageinstaller:id/deleted_file_state_cb"
-        if ($tapped) { Start-Sleep 1; Tap-ById "android:id/button1" | Out-Null }
-        Start-Sleep 3
-        $vc = (& $ADB shell dumpsys package $PKG | Select-String "versionCode" | Select-Object -First 1)
-        if ($vc) { break }
+    # adb install 会阻塞到用户应答/超时，所以放后台跑；vivo 安全守护必须在
+    # 安装阻塞期间点选（勾选「已了解风险」→ 继续安装），装完再点就晚了。
+    $apkFull = (Resolve-Path $Apk).Path
+    $job = Start-Job { param($a, $p) & $a install -r $p 2>&1 } -ArgumentList $ADB, $apkFull
+    $deadline = (Get-Date).AddSeconds(100)
+    while ((Get-Date) -lt $deadline -and $job.State -eq "Running") {
+        if (Tap-ById "com.android.packageinstaller:id/deleted_file_state_cb") { Start-Sleep -Milliseconds 700 }
+        Tap-ById "android:id/button1" | Out-Null
+        Start-Sleep -Milliseconds 900
     }
+    $out = Receive-Job $job -Wait 2>&1 | Out-String
+    Remove-Job $job -Force
+    Write-Host $out.Trim()
+    Gate "adb install 成功" ($out -match "Success") ($out.Trim())
     $vcLine = (& $ADB shell dumpsys package $PKG | Select-String "versionCode" | Select-Object -First 1).ToString()
     Gate "versionCode=29" ($vcLine -match "versionCode=29") $vcLine.Trim()
 }
@@ -79,7 +83,7 @@ function Phase-Logs {
     Gate "日志权限 -rw-------" ($ls -match "^-rw-------") $ls.Trim()
     $manual = & $ADB shell run-as $PKG ls files/manual.log 2>&1 | Out-String
     Gate "manual.log 已清理" ($manual -match "No such file") ""
-    $prefs = & $ADB shell run-as $PKG cat files/shared_prefs/dsh_mobile.xml 2>&1 | Out-String
+    $prefs = & $ADB shell run-as $PKG cat shared_prefs/dsh_mobile.xml 2>&1 | Out-String
     Gate "launch_url 已写 prefs" ($prefs -match "launch_url") ""
 }
 
@@ -110,4 +114,4 @@ if ($Phase -in @("all", "logs")) { Phase-Logs }
 if ($Phase -in @("all", "perf")) { Phase-Perf }
 Write-Host ""
 Write-Host ("验收汇总：PASS={0} FAIL={1}" -f $script:Pass, $script:Fail)
-exit ($script:Fail -gt 0 ? 1 : 0)
+if ($script:Fail -gt 0) { exit 1 } else { exit 0 }

@@ -498,8 +498,9 @@ public class DshServerService extends Service {
 
     /** tail 服务日志，发现行首 "dsh web: http" 就把带 token 的完整 URL 写进
      *  SharedPreferences（launch_url + launch_url_ts），MainActivity 直接取用。
-     *  进程退出或 bootGen 换代时线程结束。全程只读日志文件——node 在追加，
-     *  边写边改有竞态，所以打码只留给轮转做。 */
+     *  进程退出或 bootGen 换代时线程结束。写 prefs 成功后把该行 token 就地打码
+     *  （只覆盖当前文件中该行的 value 字节，不动文件长度/追加点——node 在末尾追加，
+     *  我们 pwrite 前面的已固化字节，无结构竞态）；其余打码留给轮转做。 */
     private void startLogWatcher(final Process proc, final int gen) {
         Thread t = new Thread(new Runnable() {
             @Override public void run() {
@@ -521,10 +522,10 @@ public class DshServerService extends Service {
 
     /** 从 pos 起读新增的行，返回新的读取位置；日志被截断重写（node 重启时
      *  Redirect.to 会清空）就回到 0。文件末尾没换行的残行不消费、留给下一轮，
-     *  防止抓到半个 URL。返回新位置。 */
+     *  防止抓到半个 URL。返回新位置。RAF 以 "rw" 打开供命中行就地打码。 */
     private long scanLogNewLines(File log, long pos, int gen) throws IOException {
         if (!log.exists()) return pos;
-        RandomAccessFile raf = new RandomAccessFile(log, "r");
+        RandomAccessFile raf = new RandomAccessFile(log, "rw");
         try {
             long len = raf.length();
             if (len < pos) pos = 0;
@@ -536,11 +537,11 @@ public class DshServerService extends Service {
                     // 读到文件末尾：以换行符结尾才算整行
                     raf.seek(ptr - 1);
                     boolean terminated = raf.read() == '\n';
-                    raf.seek(ptr);
                     if (!terminated) break; // 残行留给下一轮
+                    raf.seek(ptr);
                 }
+                handleLogLine(raf, pos, line, gen);
                 pos = ptr;
-                handleLogLine(line, gen);
             }
             return pos;
         } finally {
@@ -548,9 +549,11 @@ public class DshServerService extends Service {
         }
     }
 
-    /** watcher 命中 "dsh web: http"：写 prefs。解析规则与 MainActivity
-     *  的日志扫描保持一致（取到空格前的第一段，去掉可能跟着的 LAN 部分） */
-    private void handleLogLine(String line, int gen) {
+    /** watcher 命中 "dsh web: http"：先把完整带 token URL 写进 prefs（解析规则与
+     *  MainActivity 日志扫描一致：取到空格前第一段），写成功后把日志里该行的
+     *  token/api_key/key 值就地覆盖成等长 ***（raf.readLine 按字节读 ASCII，
+     *  字符下标即字节偏移；覆盖的是已换行固化的字节，不影响 node 继续追加）。 */
+    private void handleLogLine(RandomAccessFile raf, long lineStart, String line, int gen) {
         if (!line.startsWith("dsh web: http")) return;
         String u = line.substring("dsh web: ".length()).trim();
         int sp = u.indexOf(' ');
@@ -562,6 +565,22 @@ public class DshServerService extends Service {
                 .putString(KEY_LAUNCH_URL_TS, String.valueOf(System.currentTimeMillis()))
                 .apply();
         Log.i(TAG, "log watcher: launch url captured (gen=" + gen + ")");
+        // prefs 已落地，运行中的日志里不再保留 token 明文（就地等长打码）
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("([?&](?:token|api_key|key)=)[^&\\s]+")
+                    .matcher(line);
+            while (m.find()) {
+                int vStart = m.start() + m.group(1).length();
+                int vLen = m.end() - vStart;
+                long resume = raf.getFilePointer();
+                raf.seek(lineStart + vStart);
+                for (int i = 0; i < vLen; i++) raf.write('*');
+                raf.seek(resume);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "log watcher: in-place redact failed", e);
+        }
     }
 
     // ---------- payload 解压 ----------
