@@ -121,3 +121,23 @@ python tools\build_manual.py                        # 产物 build\apk\dsh-mobil
 - 权限 patch：`files/dsh-permission.patch.yml`（每次启动由服务重写，`--patch` 传给 launcher；见 v2.12）
 - 用户数据：`files/dsh-home`（会话/凭据/工作区，升级与重解压都不动它）
 - 服务日志：`files/dsh-server.log`（node 的 stdout/stderr，设置页「查看服务日志」也读它）
+
+## 第二期 backlog（用户 2026-10-19 明确：随时可做，等他想用再开工）
+
+按价值排序（不是承诺，是待办池）：
+
+1. **Python dev-pack（按需下载，不进包）** —— 用户最初的诉求「给智能体更好的开发环境」里唯一的真缺口：
+   现在只有 git/curl/ssh/node，写不了脚本、跑不了数据处理。方案：设置页一个按钮 → 下载 termux python
+   .deb 闭包（~30-50MB）解压进同一个 prefix；**必须先确认 danger-full-access 下 exec 正常**（v2.12 之后已具备）。
+2. **权限模式设置项** —— 现状是硬编码 `danger-full-access`（patch 文件写死）。要做成设置页可选：
+   但 read-only / workspace-write 在 Android 上会 fail-closed（没有 sandbox runner），选之前得给出警告/禁用。
+3. **恢复真正的 sandbox（可选）** —— 交叉编译 `landlock-run` 的 android-arm64（需 NDK；Landlock 需要内核 5.13+，
+   Android 16 满足）；或试 bwrap（大概率不行：非 root 下 user namespace 通常被禁）。做完才能重新用 workspace-write。
+   体积 +几百 KB，价值是「给智能体一个有界的执行环境」，但会牺牲一部分开发便利。
+4. **targetSdk 35 评估** —— 卡在 SELinux exec 限制，需要 linker 直调（`/system/bin/linker64` 显式加载）方案；工程量大。
+5. **git-core 精裁** —— 只留仓库必需二进制（daemon/http-backend/imap-send 等可删），可再省 ~15MB raw。
+6. **未做真机交互验证的边角**：SAF 导入流程、分享所选、全部导出、DshBridge 各 API 的 UI 触发
+   （编译期全过，只是没逐个点过）。
+
+**给后续动手的人（或我自己）**：payload 里任何「需要执行的工具」都要先确认权限模式开着，
+否则就是 v2.12 之前那种「工具装了但门是锁的」——这次踩坑的完整机理见上面 v2.12 段。
