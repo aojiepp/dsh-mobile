@@ -31,10 +31,11 @@ APKSIGNER_JAR = os.path.join(BT, "lib", "apksigner.jar")
 # 新版已修复；aapt2/zipalign/apksigner 仍用 34.0.0 不动
 D8_JAR = os.path.join(SDK, "build-tools", "36.0.0", "lib", "d8.jar")
 
-# versionCode 29：v2.11（安全基线 + 开发工具链 + 收纳箱重做），payload 变了必须 bump
-# （完成标记按 versionCode 命名，旧标记失配才会触发重解压）。
-VERSION_CODE = 29
-VERSION_NAME = "2.11"
+# versionCode 30：v2.12（沙箱解锁：注入 DSH_PERMISSION_MODE=danger-full-access，
+# 否则 Android 上无 bwrap/Landlock runner → sandbox fail-closed → 智能体所有 bash 命令被拒）。
+# 改了 Java/env 即 bump，便于真机区分版本。
+VERSION_CODE = 30
+VERSION_NAME = "2.12"
 
 JAVA_HOME = os.environ.get("JAVA_HOME", "")
 JAVAC = os.path.join(JAVA_HOME, "bin", "javac.exe") if JAVA_HOME else "javac"

@@ -120,6 +120,59 @@ public class DshServerService extends Service {
     }
     public static File dshHomeDir(Context ctx) { return new File(ctx.getFilesDir(), "dsh-home"); }
 
+    /** 权限 patch 文件名：以 --patch 叠加到 web profile 之上，见 ensurePermissionPatch() */
+    private static final String PERMISSION_PATCH = "dsh-permission.patch.yml";
+
+    public static File permissionPatchFile(Context ctx) {
+        return new File(ctx.getFilesDir(), PERMISSION_PATCH);
+    }
+
+    /**
+     * 写权限 patch 文件：把部署默认权限改成 danger-full-access + approval never。
+     *
+     * 为什么必须走 --patch 而不是环境变量：dsh 0.2.1 的 base profile 里写的是
+     * `mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'`，但那个
+     * `!!js` 表达式在 profile 组合阶段求值时拿不到我们注入子进程的 env（实测：
+     * node 进程 environ 里 DSH_PERMISSION_MODE 明明在，会话仍然 pin 了
+     * workspace-write）。--patch 是字面量覆盖，不经过表达式求值，可靠。
+     *
+     * 为什么非要 danger-full-access：Android 上没有 bwrap，payload 也没带
+     * Landlock launcher（@deepseek-ai/node-addon-system-linux-arm64 是可选依赖，
+     * 打 payload 的机器上装不到），sandbox-local 是 fail-closed 的 —— 默认的
+     * workspace-write 会让 bash 工具直接抛 SANDBOX_UNAVAILABLE，智能体一条命令
+     * 都执行不了。danger-full-access 下 bash/fs/terminal 都跳过 DSH 的围栏，
+     * Android 自身的 app 沙箱（UID + SELinux + 私有目录）仍是硬边界。
+     * approval=never 配套：手机端没有审批 UI，ask 会把危险操作卡死。
+     */
+    public static void ensurePermissionPatch(Context ctx) {
+        File f = permissionPatchFile(ctx);
+        File workspace = new File(ctx.getFilesDir(), "workspace");
+        String body = "# dsh-mobile 生成：Android 无 bwrap/Landlock runner，DSH sandbox 会 fail-closed；\n"
+                + "# 这里把部署默认权限设为 danger-full-access（Android app 沙箱仍是硬边界）。\n"
+                + "- id: sandbox-policy\n"
+                + "  name: '@deepseek-ai/dsh-sandbox-policy'\n"
+                + "  config:\n"
+                + "    mode: danger-full-access\n"
+                + "    workspaceRoot: " + workspace.getAbsolutePath() + "\n"
+                + "- id: approval\n"
+                + "  name: '@deepseek-ai/dsh-user-approval'\n"
+                + "  config:\n"
+                + "    policy: never\n";
+        try {
+            if (!workspace.exists()) workspace.mkdirs();
+            java.io.FileOutputStream out = new java.io.FileOutputStream(f, false);
+            try {
+                out.write(body.getBytes("UTF-8"));
+            } finally {
+                out.close();
+            }
+            f.setReadable(false, false);
+            f.setReadable(true, true);
+        } catch (Exception e) {
+            Log.w(TAG, "ensurePermissionPatch failed", e);
+        }
+    }
+
     public static boolean isPayloadReady(Context ctx) {
         return new File(payloadDir(ctx), payloadMarkerName(ctx)).exists();
     }
@@ -296,10 +349,16 @@ public class DshServerService extends Service {
                 // 在本机不存在 → 初始化 crypto 时直接以退出码 13 死掉（v2.9.1 修复）。
                 // 这里补一份最小配置并用 OPENSSL_CONF 指过去。
                 File opensslConf = ensureOpensslConf();
+                // 权限 patch（danger-full-access + approval never）：必须在 spawn 前写好
+                ensurePermissionPatch(this);
                 ProcessBuilder pb = new ProcessBuilder(
                         nodeBin.getAbsolutePath(),
                         "--expose-internals",
-                        "lib/bin.js", "web",
+                        "lib/bin.js",
+                        // launcher flag 必须在 profile 之前：bin.js 遇到第一个不认识的
+                        // token 就开始把剩下的当 app 参数透传
+                        "--profile", "web",
+                        "--patch", permissionPatchFile(this).getAbsolutePath(),
                         "--host", "127.0.0.1",
                         "--port", "3080",
                         // Android 上没有可打开的浏览器，跳过 browser handoff
@@ -325,6 +384,14 @@ public class DshServerService extends Service {
                 pb.environment().put("LANG", "C.UTF-8");
                 pb.environment().put("LC_ALL", "C.UTF-8");
                 pb.environment().put("NODE_NO_WARNINGS", "1");
+                // 权限模式 = danger-full-access（v2.12）：DSH 0.2.1 的 file sandbox 是
+                // fail-closed 的——sandbox-local 在 linux 上只认 bwrap 或 Landlock launcher
+                // 预编译二进制，Android 上两者都不存在（payload 没有 landlock 的 linux-arm64
+                // 包），于是默认的 workspace-write 会让 bash 工具直接抛 SANDBOX_UNAVAILABLE，
+                // 一条命令都执行不了（git/curl/npm 全锁死）。danger-full-access 是 upstream
+                // 留的逃生口：bash-sandbox/fs-sandbox/terminal 在此模式下直接裸跑，不再套
+                // DSH 的围栏；Android 自身的 app 沙箱（UID/SELinux/私有目录）仍是硬边界。
+                pb.environment().put("DSH_PERMISSION_MODE", "danger-full-access");
                 // 开发工具链（git/curl/openssh/npm/pnpm）：PATH、git CA/exec-path、npm/pnpm 落盘目录
                 ToolchainEnv.apply(pb.environment(), this);
                 pb.redirectErrorStream(true);

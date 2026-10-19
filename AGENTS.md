@@ -37,6 +37,27 @@ Android 上独立跑完整 DSH 的壳工程。构建链、payload 管线、真�
   可选再省 ~15MB raw：git-core 里只留仓库必需二进制（daemon/http-backend/imap-send 等可删），本期未裁。
 - **targetSdk 28 不动**（SELinux exec 限制；升 35 需 linker 直调方案，第二期评估）。
 
+## v2.12（vc30，2026-10-19）：权限模式解锁 —— 智能体终于能用 bash
+
+- **根因**：DSH 0.2.1 的 file sandbox 是 **fail-closed** 的：`dsh-sandbox-local` 在 Linux 上只认
+  `bwrap` 或 Landlock launcher（预编译包 `@deepseek-ai/node-addon-system-<platform>-<arch>`）。
+  Android 上 bwrap 不存在、payload 也没带 landlock 的 linux-arm64 包（它是 optionalDependency，
+  在 Windows 上打 payload 时根本装不到），于是默认 `workspace-write` 下 bash 工具直接抛
+  `SANDBOX_UNAVAILABLE` —— 工具链（git/curl/npm）全都装了但一条命令都执行不了。
+  真机铁证：`Error: sandbox mode "workspace-write" is requested but no sandbox backend is usable on this host`。
+- **修复**：`DshServerService.ensurePermissionPatch()` 在 spawn 前写 `files/dsh-permission.patch.yml`，
+  启动参数改成 `lib/bin.js --profile web --patch <file> --host ...`（**launcher flag 必须在 profile 名之前**，
+  bin.js 遇到第一个不认识的 token 就开始把后面当 app 参数透传）。patch 覆盖
+  `sandbox-policy.mode = danger-full-access` + `approval.policy = never`（手机没审批 UI，ask 会卡死）。
+- **别用 `DSH_PERMISSION_MODE` 环境变量（试过，无效）**：node 进程 environ 里明明有该变量
+  （`/proc/<pid>/environ` 确认），但 base profile 的
+  `mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'` 在 profile 组合时求值拿不到它，
+  会话仍然 pin 成 `workspace-write`。`--patch` 是字面量覆盖、不经过表达式求值，可靠。（env 保留注入，无害。）
+- **验证**（真机）：智能体执行 `git --version` → `git version 2.56.0`；新建会话权限选择器默认「完全权限」。
+  旧会话的 pin 仍显示「工作区内修改」（历史事件），执行按部署默认 mode 走，不影响。
+- `verify_release.ps1` 的 install 阶段修了两处：versionCode 从 APK 的 `aapt2 dump badging` 读（不写死），
+  装完 `dumpsys` 有延迟、查一次会误报 → 加 8 次重试。
+
 ## 图标（SVG 真源）
 
 - 真源：`design/ic_launcher.svg`（蓝色大肥鱼 / 鲸鱼娘 Q 版头像，简笔扁平）。
@@ -97,5 +118,6 @@ python tools\build_manual.py                        # 产物 build\apk\dsh-mobil
 ## 关键路径（运行时）
 
 - 运行时目录：`files/payload`（termux 前缀 + `dsh-app` 裁剪树）
+- 权限 patch：`files/dsh-permission.patch.yml`（每次启动由服务重写，`--patch` 传给 launcher；见 v2.12）
 - 用户数据：`files/dsh-home`（会话/凭据/工作区，升级与重解压都不动它）
 - 服务日志：`files/dsh-server.log`（node 的 stdout/stderr，设置页「查看服务日志」也读它）

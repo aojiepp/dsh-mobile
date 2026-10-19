@@ -1,13 +1,13 @@
-# verify_release.ps1 — dsh-mobile v2.11 真机验收脚本（vivo V2339A）
+# verify_release.ps1 — dsh-mobile 真机验收脚本（vivo V2339A；版本无关，APK 名可传参）
 # 用法：手机开 USB 调试连上后，在 dsh-mobile 根目录跑：
-#   pwsh -NoProfile -File tools\verify_release.ps1 -Phase all [-Apk build\apk\dsh-mobile-v2.11-release.apk]
+#   pwsh -NoProfile -File tools\verify_release.ps1 -Phase all [-Apk build\apk\dsh-mobile-v2.12-release.apk]
 # 阶段：install（装包+vivo两连点+versionCode）/ security（P0/P1）/ logs（debug 包日志卫生）/ perf（CPU 采样）
 # 约定：release 包验 security（run-as 应被拒）；debug 包验 logs（run-as 可读私有目录）。
 [CmdletBinding()]
 param(
     [string]$Phase = "all",
-    [string]$Apk = "build\apk\dsh-mobile-v2.11-release.apk",
-    [string]$DebugApk = "build\apk\dsh-mobile-v2.11-debug.apk"
+    [string]$Apk = "build\apk\dsh-mobile-v2.12-release.apk",
+    [string]$DebugApk = "build\apk\dsh-mobile-v2.12-debug.apk"
 )
 $ErrorActionPreference = "Continue"
 $ADB = "C:\Android\platform-tools\adb.exe"
@@ -50,8 +50,17 @@ function Phase-Install {
     Remove-Job $job -Force
     Write-Host $out.Trim()
     Gate "adb install 成功" ($out -match "Success") ($out.Trim())
-    $vcLine = (& $ADB shell dumpsys package $PKG | Select-String "versionCode" | Select-Object -First 1).ToString()
-    Gate "versionCode=29" ($vcLine -match "versionCode=29") $vcLine.Trim()
+    # 期望版本从 APK 里读（aapt2 badging），不写死；安装后 dumpsys 有缓存延迟，
+    # 立刻查会拿到旧 versionCode → 带重试。
+    $apkVc = ([regex]::Match(((& $AAPT2 dump badging $apkFull 2>$null) -join "`n"), "versionCode='(\d+)'")).Groups[1].Value
+    if ($apkVc -eq "") { $apkVc = "?" }
+    $vcLine = ""
+    for ($i = 0; $i -lt 8; $i++) {
+        $vcLine = (& $ADB shell dumpsys package $PKG | Select-String "versionCode" | Select-Object -First 1).ToString()
+        if ($vcLine -match "versionCode=$([regex]::Escape($apkVc))") { break }
+        Start-Sleep -Milliseconds 800
+    }
+    Gate "versionCode=$apkVc" ($vcLine -match "versionCode=$([regex]::Escape($apkVc))") $vcLine.Trim()
 }
 
 function Phase-Security {
@@ -120,3 +129,4 @@ if ($Phase -in @("all", "perf")) { Phase-Perf }
 Write-Host ""
 Write-Host ("验收汇总：PASS={0} FAIL={1}" -f $script:Pass, $script:Fail)
 if ($script:Fail -gt 0) { exit 1 } else { exit 0 }
+
